@@ -1,0 +1,137 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Invoice {
+  id              String   @id @default(cuid())
+  invoiceNumber   String   @unique
+  invoiceDate     DateTime
+  dueDate         DateTime
+  paymentTerms    String   @default("14 pv netto / 14 days net")
+  periodStart     DateTime
+  periodEnd       DateTime
+
+  // Seller (substitute worker)
+  sellerName        String
+  sellerAddress     String
+  sellerPostalCode  String
+  sellerCity        String
+  sellerBusinessId  String
+  sellerVatId       String
+  sellerIban        String
+  sellerBic         String
+  sellerEmail       String?
+  sellerPhone       String?
+
+  // Buyer (Wolt)
+  buyerName         String
+  buyerAddress      String
+  buyerPostalCode   String
+  buyerCity         String
+  buyerBusinessId   String
+  buyerVatId        String
+
+  // Reference to original Wolt self-billing invoice
+  woltInvoiceNumber String?
+  woltInvoiceDate   DateTime?
+
+  // Client (account holder) link
+  clientId      Int?
+  client        Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  // Computed totals (stored for fast retrieval)
+  totalExVat      Float
+  totalVat        Float
+  totalIncVat     Float
+
+  notes           String?
+
+  lineItems       LineItem[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Client {
+  id           Int       @id @default(autoincrement())
+  displayId    String    @unique  // "101", "102", etc. — bookkeeper-assigned
+  role         String    @default("ACCOUNT_HOLDER") // "SUBSTITUTE_WORKER" | "ACCOUNT_HOLDER"
+  name         String
+  businessId   String?
+  vatId        String?
+  address      String?
+  postalCode   String?
+  city         String?
+  email        String?
+  phone        String?
+  iban         String?
+  bic          String?
+  notes        String?
+  invoices     Invoice[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model BookkeeperInvoice {
+  id              String   @id @default(cuid())
+  invoiceNumber   String   @unique
+  issueDate       DateTime
+  dueDate         DateTime
+  paymentTerms    String   @default("14 pv netto / 14 days net")
+
+  // Bookkeeper (seller) details
+  bkName          String
+  bkBusinessId    String
+  bkVatId         String
+  bkAddress       String
+  bkPostalCode    String
+  bkCity          String
+  bkIban          String
+  bkBic           String
+  bkEmail         String?
+  bkPhone         String?
+
+  // Client (buyer) snapshot at time of invoice
+  clientId        Int?
+  clientName      String
+  clientBusinessId String?
+  clientVatId     String?
+  clientAddress   String?
+  clientPostalCode String?
+  clientCity      String?
+  clientEmail     String?
+
+  // Service line
+  serviceDescription String
+  amountExVat        Float
+  vatRate            Float
+  vatAmount          Float
+  totalIncVat        Float
+
+  notes           String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model LineItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sortOrder   Int     @default(0)
+
+  description  String
+  earnedAmount Float   @default(0)   // Gross amount from Wolt (excl. VAT)
+  sharePercent Float   @default(100) // % of work done by this worker
+  vatRate      Float                 // VAT rate as percentage (e.g. 25.5, 0)
+
+  // Stored computed values
+  amountExVat Float   // earnedAmount × sharePercent / 100
+  vatAmount   Float
+  totalAmount Float
+}

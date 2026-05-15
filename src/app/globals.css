@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Remove number input spinners */
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type='number'] {
+  -moz-appearance: textfield;
+}
+
+/* Compact form controls */
+.field {
+  @apply flex flex-col gap-0.5;
+}
+.field label {
+  @apply text-xs font-medium text-gray-500 uppercase tracking-wide;
+}
+.field input,
+.field textarea,
+.field select {
+  @apply border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white;
+}
+.field input.readonly,
+.field input[readonly] {
+  @apply bg-gray-50 text-gray-600 cursor-default;
+}
+
+/* Section heading inside the form */
+.form-section {
+  @apply mb-6;
+}
+.form-section-title {
+  @apply text-xs font-bold uppercase tracking-widest text-gray-400 border-b border-gray-200 pb-1 mb-3;
+}
