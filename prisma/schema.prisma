@@ -40,9 +40,13 @@ model Invoice {
   woltInvoiceNumber String?
   woltInvoiceDate   DateTime?
 
-  // Client (account holder) link
+  // Seller client link (substitute worker)
   clientId      Int?
-  client        Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  client        Client?   @relation("SellerInvoices", fields: [clientId], references: [id], onDelete: SetNull)
+
+  // Buyer client link (account holder — if they are a bookkeeping client)
+  buyerClientId Int?
+  buyerClient   Client?   @relation("BuyerInvoices", fields: [buyerClientId], references: [id], onDelete: SetNull)
 
   // Computed totals (stored for fast retrieval)
   totalExVat      Float
@@ -71,10 +75,59 @@ model Client {
   phone        String?
   iban         String?
   bic          String?
+  notes         String?
+
+  invoices      Invoice[]           @relation("SellerInvoices")
+  buyerInvoices Invoice[]           @relation("BuyerInvoices")
+  incomePeriods OwnerIncomePeriod[]
+  expenses      OwnerExpense[]
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// ── Owner income period (Wolt self-billing amounts per pay period) ──────────
+model OwnerIncomePeriod {
+  id             String   @id @default(cuid())
+  clientId       Int
+  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  periodStart    DateTime
+  periodEnd      DateTime
+  description    String?
+  woltInvoiceRef String?   // e.g. FIN/26/3111862-6/1/1
+
+  totalExVat     Float
+  vatRate        Float    @default(25.5)
+  vatAmount      Float
+  totalIncVat    Float
+
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+// ── Owner business expense entry ─────────────────────────────────────────────
+model OwnerExpense {
+  id           String   @id @default(cuid())
+  clientId     Int
+  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  date         DateTime
+  description  String
+  supplier     String?
+  category     String   @default("OTHER") // MATERIALS|TRAVEL|PHONE_INTERNET|EQUIPMENT|VEHICLE|MARKETING|OFFICE|BOOKKEEPING|OTHER
+
+  amountExVat  Float
+  vatRate      Float    @default(25.5)
+  vatAmount    Float
+  totalAmount  Float
+
+  receiptRef   String?
   notes        String?
-  invoices     Invoice[]
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model BookkeeperInvoice {

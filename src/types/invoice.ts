@@ -46,6 +46,7 @@ export interface InvoiceInput {
 
   notes?: string
   workerId?: number | null
+  buyerClientId?: number | null
 
   lineItems: LineItemInput[]
 }

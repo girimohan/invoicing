@@ -1,11 +1,52 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { saveInvoice } from '@/actions/invoice'
+import { saveInvoice, updateInvoice } from '@/actions/invoice'
 import { getClients, createClient, type ClientRole } from '@/actions/client'
 import { calculateInvoice } from '@/lib/calculations'
 import InvoicePreview from './InvoicePreview'
 import type { FormState, LineItemRow, InvoiceInput } from '@/types/invoice'
+
+type EditInvoice = {
+  id: string
+  invoiceNumber: string
+  invoiceDate: Date
+  dueDate: Date
+  paymentTerms: string
+  periodStart: Date
+  periodEnd: Date
+  woltInvoiceNumber: string | null
+  woltInvoiceDate: Date | null
+  sellerName: string
+  sellerAddress: string
+  sellerPostalCode: string
+  sellerCity: string
+  sellerBusinessId: string
+  sellerVatId: string
+  sellerIban: string
+  sellerBic: string
+  sellerEmail: string | null
+  sellerPhone: string | null
+  buyerName: string
+  buyerAddress: string
+  buyerPostalCode: string
+  buyerCity: string
+  buyerBusinessId: string
+  buyerVatId: string
+  notes: string | null
+  clientId: number | null
+  lineItems: {
+    id: string
+    description: string
+    earnedAmount: number
+    sharePercent: number
+    vatRate: number
+    amountExVat: number
+    vatAmount: number
+    totalAmount: number
+    sortOrder: number
+  }[]
+}
 
 type ClientOption = {
   id: number
@@ -43,6 +84,41 @@ const defaultLineItems: LineItemRow[] = [
   { id: '3', description: 'Others (if any)', earnedAmount: '', sharePercent: '75', vatRate: '25.5' },
 ]
 
+function toDateStr(d: Date | string | null | undefined): string {
+  if (!d) return ''
+  return new Date(d).toISOString().split('T')[0]
+}
+
+function buildEditForm(inv: EditInvoice): FormState {
+  return {
+    invoiceNumber: inv.invoiceNumber,
+    invoiceDate: toDateStr(inv.invoiceDate),
+    dueDate: toDateStr(inv.dueDate),
+    paymentTerms: inv.paymentTerms,
+    periodStart: toDateStr(inv.periodStart),
+    periodEnd: toDateStr(inv.periodEnd),
+    woltInvoiceNumber: inv.woltInvoiceNumber ?? '',
+    woltInvoiceDate: toDateStr(inv.woltInvoiceDate),
+    sellerName: inv.sellerName,
+    sellerAddress: inv.sellerAddress,
+    sellerPostalCode: inv.sellerPostalCode,
+    sellerCity: inv.sellerCity,
+    sellerBusinessId: inv.sellerBusinessId,
+    sellerVatId: inv.sellerVatId,
+    sellerIban: inv.sellerIban,
+    sellerBic: inv.sellerBic,
+    sellerEmail: inv.sellerEmail ?? '',
+    sellerPhone: inv.sellerPhone ?? '',
+    buyerName: inv.buyerName,
+    buyerAddress: inv.buyerAddress,
+    buyerPostalCode: inv.buyerPostalCode,
+    buyerCity: inv.buyerCity,
+    buyerBusinessId: inv.buyerBusinessId,
+    buyerVatId: inv.buyerVatId,
+    notes: inv.notes ?? '',
+  }
+}
+
 function buildInitialForm(invoiceNumber: string): FormState {
   const today = todayIso()
   return {
@@ -78,13 +154,25 @@ function buildInitialForm(invoiceNumber: string): FormState {
 
 export default function InvoiceApp({
   initialInvoiceNumber,
+  editInvoice = null,
 }: {
   initialInvoiceNumber: string
+  editInvoice?: EditInvoice | null
 }) {
   const [form, setForm] = useState<FormState>(() =>
-    buildInitialForm(initialInvoiceNumber)
+    editInvoice ? buildEditForm(editInvoice) : buildInitialForm(initialInvoiceNumber)
   )
-  const [lineItems, setLineItems] = useState<LineItemRow[]>(defaultLineItems)
+  const [lineItems, setLineItems] = useState<LineItemRow[]>(() =>
+    editInvoice
+      ? editInvoice.lineItems.map((li) => ({
+          id: li.id,
+          description: li.description,
+          earnedAmount: String(li.earnedAmount),
+          sharePercent: String(li.sharePercent),
+          vatRate: String(li.vatRate),
+        }))
+      : defaultLineItems
+  )
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const profileSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -322,6 +410,7 @@ export default function InvoiceApp({
         totalVat: calculated.totalVat,
         totalIncVat: calculated.totalIncVat,
         workerId: selectedWorkerId ?? null,
+        buyerClientId: selectedHolderId ?? null,
         lineItems: filledItems.map((item) => {
           const idx = lineItems.indexOf(item)
           return {
@@ -338,7 +427,9 @@ export default function InvoiceApp({
         }),
       }
 
-      const { id } = await saveInvoice(invoiceData)
+      const { id } = editInvoice
+        ? await updateInvoice(editInvoice.id, invoiceData)
+        : await saveInvoice(invoiceData)
 
       // Trigger PDF download
       const link = document.createElement('a')
@@ -347,6 +438,10 @@ export default function InvoiceApp({
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
+
+      if (editInvoice) {
+        window.location.href = '/invoices'
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save invoice.')
     } finally {
@@ -385,14 +480,18 @@ export default function InvoiceApp({
       <div className="w-[55%] overflow-y-auto bg-white">
         <form onSubmit={handleSubmit} noValidate>
           <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
-            <h1 className="font-bold text-base">New Substitute Invoice</h1>
+            <h1 className="font-bold text-base">
+              {editInvoice ? `Editing: ${editInvoice.invoiceNumber}` : 'New Substitute Invoice'}
+            </h1>
             <div className="flex gap-2">
               <button
                 type="submit"
                 disabled={submitting}
                 className="bg-blue-700 text-white text-xs px-4 py-1.5 rounded font-semibold hover:bg-blue-800 disabled:opacity-50"
               >
-                {submitting ? 'Generating…' : 'Generate Invoice (PDF)'}
+                {submitting
+                  ? (editInvoice ? 'Updating…' : 'Generating…')
+                  : (editInvoice ? 'Update & Re-download PDF' : 'Generate Invoice (PDF)')}
               </button>
             </div>
           </div>
@@ -470,11 +569,8 @@ export default function InvoiceApp({
                     type="text"
                     value={form.invoiceNumber}
                     onChange={(e) => handleChange('invoiceNumber', e.target.value)}
-                    readOnly={selectedWorkerId !== null}
-                    placeholder="Select an account holder to auto-generate, or type manually"
-                    className={`w-full border rounded px-2 py-1.5 text-sm font-mono font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-                      selectedWorkerId ? 'bg-white border-blue-300 text-blue-800 cursor-default' : 'border-gray-300 bg-white'
-                    }`}
+                      placeholder="Auto-generated — you can type to override"
+                    className="w-full border border-blue-300 rounded px-2 py-1.5 text-sm font-mono font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-blue-800"
                   />
                 </div>
                 <div>

@@ -29,6 +29,9 @@ export default function RootLayout({
           <Link href="/bookkeeper" className="hover:text-gray-300">
             Bookkeeper Invoice
           </Link>
+          <Link href="/books" className="hover:text-gray-300">
+            Client Books
+          </Link>
         </nav>
         {children}
       </body>
