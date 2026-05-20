@@ -80,7 +80,7 @@ function addDays(isoDate: string, days: number): string {
 
 const defaultLineItems: LineItemRow[] = [
   { id: '1', description: 'Wolt Courier Fees', earnedAmount: '', sharePercent: '75', vatRate: '25.5' },
-  { id: '2', description: 'Tips', earnedAmount: '', sharePercent: '75', vatRate: '0' },
+  { id: '2', description: 'Tips', earnedAmount: '', sharePercent: '100', vatRate: '0' },
   { id: '3', description: 'Others (if any)', earnedAmount: '', sharePercent: '75', vatRate: '25.5' },
 ]
 
@@ -727,23 +727,17 @@ export default function InvoiceApp({
                             />
                           </td>
                           <td className="p-1 border border-gray-200">
-                            <input
-                              type="number"
+                            <select
                               value={item.sharePercent}
                               onChange={(e) => handleLineItemChange(item.id, 'sharePercent', e.target.value)}
-                              list="share-presets"
-                              className="w-full border-0 p-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400 rounded"
-                              step="any"
-                              min="0"
-                              max="100"
-                              placeholder="75"
-                            />
-                            <datalist id="share-presets">
-                              <option value="75" />
-                              <option value="100" />
-                              <option value="50" />
-                              <option value="25" />
-                            </datalist>
+                              className="w-full border-0 p-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400 rounded bg-transparent"
+                            >
+                              <option value="100">100%</option>
+                              <option value="80">80%</option>
+                              <option value="75">75%</option>
+                              <option value="50">50%</option>
+                              <option value="25">25%</option>
+                            </select>
                           </td>
                           <td className="p-1 border border-gray-200 text-right text-gray-600 pr-2 font-mono">
                             {c ? c.amountExVat.toFixed(2) : '0.00'}

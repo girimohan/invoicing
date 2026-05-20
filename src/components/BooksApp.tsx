@@ -448,8 +448,8 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                         const paid    = inv.totalExVat
                         const cut     = r2(gross - paid)
                         const avgSh   = gross > 0
-                          ? r2(inv.lineItems.reduce((s, li) => s + li.sharePercent * li.earnedAmount, 0) / gross)
-                          : (inv.lineItems[0]?.sharePercent ?? 0)
+                          ? Math.round(inv.lineItems.reduce((s, li) => s + li.sharePercent * li.earnedAmount, 0) / gross)
+                          : Math.round(inv.lineItems[0]?.sharePercent ?? 0)
                         return (
                           <tr key={inv.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                             <td className="px-4 py-2.5 font-mono text-gray-500 text-[11px]">{inv.invoiceNumber}</td>
@@ -673,8 +673,8 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                       {sellerInvoices.map((inv, idx) => {
                         const gross  = r2(inv.lineItems.reduce((s, li) => s + li.earnedAmount, 0))
                         const avgSh  = gross > 0
-                          ? r2(inv.lineItems.reduce((s, li) => s + li.sharePercent * li.earnedAmount, 0) / gross)
-                          : (inv.lineItems[0]?.sharePercent ?? 0)
+                          ? Math.round(inv.lineItems.reduce((s, li) => s + li.sharePercent * li.earnedAmount, 0) / gross)
+                          : Math.round(inv.lineItems[0]?.sharePercent ?? 0)
                         return (
                           <tr key={inv.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                             <td className="px-4 py-2.5 font-mono text-gray-500 text-[11px]">{inv.invoiceNumber}</td>
@@ -751,8 +751,8 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                           {linkedInvoices.map((inv, idx) => {
                             const gross = r2(inv.lineItems.reduce((s, li) => s + li.earnedAmount, 0))
                             const avgSh = gross > 0
-                              ? r2(inv.lineItems.reduce((s, li) => s + li.sharePercent * li.earnedAmount, 0) / gross)
-                              : (inv.lineItems[0]?.sharePercent ?? 0)
+                              ? Math.round(inv.lineItems.reduce((s, li) => s + li.sharePercent * li.earnedAmount, 0) / gross)
+                              : Math.round(inv.lineItems[0]?.sharePercent ?? 0)
                             return (
                               <tr key={inv.id} className={`border-t border-gray-100 ${idx % 2 !== 0 ? 'bg-gray-50' : ''}`}>
                                 <td className="px-4 py-2 font-mono text-[11px] text-gray-500">

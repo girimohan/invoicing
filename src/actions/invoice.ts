@@ -46,7 +46,7 @@ export async function saveInvoice(data: InvoiceInput): Promise<{ id: string }> {
         create: data.lineItems.map((item, idx) => ({
           description: item.description,
           earnedAmount: item.earnedAmount,
-          sharePercent: item.sharePercent,
+          sharePercent: Math.round(item.sharePercent),
           vatRate: item.vatRate,
           amountExVat: item.amountExVat,
           vatAmount: item.vatAmount,
@@ -123,7 +123,7 @@ export async function updateInvoice(id: string, data: InvoiceInput): Promise<{ i
         create: data.lineItems.map((item, idx) => ({
           description: item.description,
           earnedAmount: item.earnedAmount,
-          sharePercent: item.sharePercent,
+          sharePercent: Math.round(item.sharePercent),
           vatRate: item.vatRate,
           amountExVat: item.amountExVat,
           vatAmount: item.vatAmount,
