@@ -727,32 +727,46 @@ export default function InvoiceApp({
                             />
                           </td>
                           <td className="p-1 border border-gray-200">
-                            <select
+                            <input
+                              type="number"
                               value={item.sharePercent}
                               onChange={(e) => handleLineItemChange(item.id, 'sharePercent', e.target.value)}
-                              className="w-full border-0 p-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400 rounded bg-transparent"
-                            >
-                              <option value="100">100%</option>
-                              <option value="80">80%</option>
-                              <option value="75">75%</option>
-                              <option value="50">50%</option>
-                              <option value="25">25%</option>
-                            </select>
+                              list="share-presets"
+                              className="w-full border-0 p-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400 rounded"
+                              min="0"
+                              max="100"
+                              step="1"
+                              placeholder="75"
+                            />
+                            <datalist id="share-presets">
+                              <option value="100" />
+                              <option value="80" />
+                              <option value="75" />
+                              <option value="50" />
+                              <option value="25" />
+                            </datalist>
                           </td>
                           <td className="p-1 border border-gray-200 text-right text-gray-600 pr-2 font-mono">
                             {c ? c.amountExVat.toFixed(2) : '0.00'}
                           </td>
                           <td className="p-1 border border-gray-200">
-                            <select
+                            <input
+                              type="number"
                               value={item.vatRate}
                               onChange={(e) => handleLineItemChange(item.id, 'vatRate', e.target.value)}
-                              className="w-full border-0 p-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 rounded bg-transparent"
-                            >
-                              <option value="25.5">25.5%</option>
-                              <option value="14">14%</option>
-                              <option value="10">10%</option>
-                              <option value="0">0%</option>
-                            </select>
+                              list="vat-presets"
+                              className="w-full border-0 p-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400 rounded"
+                              min="0"
+                              max="100"
+                              step="0.1"
+                              placeholder="25.5"
+                            />
+                            <datalist id="vat-presets">
+                              <option value="25.5" />
+                              <option value="14" />
+                              <option value="10" />
+                              <option value="0" />
+                            </datalist>
                           </td>
                           <td className="p-1 border border-gray-200 text-right text-gray-600 pr-2 font-mono">
                             {c ? c.vatAmount.toFixed(2) : '0.00'}
