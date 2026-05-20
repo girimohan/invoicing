@@ -21,29 +21,27 @@
     },
     "files": [
       "electron/**/*",
-      ".next/**/*",
+      ".next/standalone/**/*",
+      ".next/static/**/*",
       "public/**/*",
-      "prisma/**/*",
       "package.json",
       "next.config.js"
     ],
     "extraResources": [
       {
         "from": "prisma",
-        "to": "prisma"
+        "to": "prisma",
+        "filter": ["schema.prisma", "*.db"]
       }
     ],
     "win": {
-      "target": "nsis",
-      "icon": "public/icon.ico"
+      "target": "nsis"
     },
     "mac": {
-      "target": "dmg",
-      "icon": "public/icon.icns"
+      "target": "dmg"
     },
     "linux": {
-      "target": "AppImage",
-      "icon": "public/icon.png"
+      "target": "AppImage"
     }
   },
   "dependencies": {
