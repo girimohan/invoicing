@@ -9,24 +9,22 @@
     "start": "next start",
     "electron:dev": "concurrently \"next dev\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
     "generate-icons": "node scripts/generate-icons.js",
-    "electron:build": "next build && electron-builder",
+    "electron:build": "next build && node scripts/copy-standalone.js && electron-builder",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio"
   },
   "build": {
-    "appId": "com.wolt.invoice-tool",
-    "productName": "Wolt Invoice Tool",
+    "appId": "com.barmo.bookkeeping",
+    "productName": "Barmo Bookkeeping",
+    "asar": false,
     "directories": {
       "output": "dist-electron"
     },
     "files": [
       "electron/**/*",
       ".next/standalone/**/*",
-      ".next/static/**/*",
-      "public/**/*",
-      "package.json",
-      "next.config.js"
+      "package.json"
     ],
     "extraResources": [
       {
@@ -34,12 +32,14 @@
         "to": "prisma",
         "filter": [
           "schema.prisma",
-          "*.db"
+          "seed.db"
         ]
       }
     ],
     "win": {
-      "target": "nsis",
+      "target": [
+        { "target": "portable", "arch": ["x64"] }
+      ],
       "icon": "public/icon.ico"
     },
     "mac": {

@@ -13,6 +13,10 @@ out/
 # SQLite database (contains personal data — do not commit)
 prisma/dev.db
 prisma/dev.db-journal
+prisma/seed.db
+
+# Electron build output (large binaries — distribute separately)
+dist-electron/
 
 # misc
 .DS_Store

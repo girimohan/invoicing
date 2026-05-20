@@ -1,12 +1,33 @@
 const { app, BrowserWindow, shell } = require('electron')
 const path = require('path')
 const { spawn } = require('child_process')
+const { existsSync, copyFileSync, mkdirSync } = require('fs')
 const http = require('http')
 
 const isDev = process.env.NODE_ENV === 'development'
 const PORT = 3000
 
 let nextProcess = null
+
+// ── First-run: copy seed DB to userData if no database exists yet ─────────────
+function initDatabase() {
+  const userDataDir = app.getPath('userData')
+  const dbDest = path.join(userDataDir, 'dev.db')
+
+  if (!existsSync(dbDest)) {
+    // seed.db is an empty SQLite DB with the correct schema, bundled in resources
+    const seedDb = path.join(process.resourcesPath, 'prisma', 'seed.db')
+    if (existsSync(seedDb)) {
+      mkdirSync(userDataDir, { recursive: true })
+      copyFileSync(seedDb, dbDest)
+      console.log('Database initialised from seed.')
+    } else {
+      console.warn('seed.db not found — database will be created on first query.')
+    }
+  }
+
+  return dbDest
+}
 
 // ── Wait until the Next.js HTTP server is accepting connections ──────────────
 function waitForServer(retries = 60) {
@@ -27,13 +48,14 @@ function waitForServer(retries = 60) {
 function startNextServer() {
   if (isDev) return Promise.resolve()
 
-  // In packaged app, resources sit next to the executable
-  const serverScript = path.join(
-    process.resourcesPath, 'app', '.next', 'standalone', 'server.js'
-  )
-  const dbPath = path.join(app.getPath('userData'), 'dev.db')
+  const dbPath = initDatabase()
+
+  // The standalone directory is unpacked by electron-builder (asar: false)
+  const standaloneDir = path.join(process.resourcesPath, 'app', '.next', 'standalone')
+  const serverScript = path.join(standaloneDir, 'server.js')
 
   nextProcess = spawn(process.execPath, [serverScript], {
+    cwd: standaloneDir,  // server.js resolves .next/static and public relative to cwd
     env: {
       ...process.env,
       PORT: String(PORT),
