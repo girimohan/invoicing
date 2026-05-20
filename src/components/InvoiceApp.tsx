@@ -728,14 +728,12 @@ export default function InvoiceApp({
                           </td>
                           <td className="p-1 border border-gray-200">
                             <input
-                              type="number"
+                              type="text"
+                              inputMode="decimal"
                               value={item.sharePercent}
                               onChange={(e) => handleLineItemChange(item.id, 'sharePercent', e.target.value)}
                               list="share-presets"
                               className="w-full border-0 p-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400 rounded"
-                              min="0"
-                              max="100"
-                              step="1"
                               placeholder="75"
                             />
                             <datalist id="share-presets">
@@ -751,14 +749,12 @@ export default function InvoiceApp({
                           </td>
                           <td className="p-1 border border-gray-200">
                             <input
-                              type="number"
+                              type="text"
+                              inputMode="decimal"
                               value={item.vatRate}
                               onChange={(e) => handleLineItemChange(item.id, 'vatRate', e.target.value)}
                               list="vat-presets"
                               className="w-full border-0 p-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400 rounded"
-                              min="0"
-                              max="100"
-                              step="0.1"
                               placeholder="25.5"
                             />
                             <datalist id="vat-presets">
