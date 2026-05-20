@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a2744"/>
+      <stop offset="100%" stop-color="#0e5486"/>
+    </linearGradient>
+    <linearGradient id="pageGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#e8f0fa"/>
+    </linearGradient>
+    <linearGradient id="rightPageGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f0f6ff"/>
+      <stop offset="100%" stop-color="#ddeaff"/>
+    </linearGradient>
+    <filter id="pageShadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="2" dy="2" stdDeviation="4" flood-color="#000" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect width="512" height="512" rx="88" ry="88" fill="url(#bgGrad)"/>
+
+  <!-- Subtle grid/dot pattern on background -->
+  <rect x="0" y="0" width="512" height="512" rx="88" ry="88"
+        fill="none" stroke="#ffffff" stroke-width="0.5" opacity="0.06"/>
+
+  <!-- Left page of open book -->
+  <rect x="68" y="108" width="162" height="278" rx="6" ry="6"
+        fill="url(#pageGrad)" filter="url(#pageShadow)"/>
+
+  <!-- Right page of open book -->
+  <rect x="282" y="108" width="162" height="278" rx="6" ry="6"
+        fill="url(#rightPageGrad)" filter="url(#pageShadow)"/>
+
+  <!-- Book spine -->
+  <rect x="230" y="102" width="52" height="290" rx="12" ry="12" fill="#071a30"/>
+  <!-- Spine highlight stripe -->
+  <rect x="237" y="102" width="10" height="290" rx="5" ry="5" fill="#1a5fa0" opacity="0.4"/>
+
+  <!-- ── Left page: ledger lines ── -->
+  <!-- Header rule (bold) -->
+  <rect x="84" y="148" width="134" height="4" rx="2" fill="#0a2744" opacity="0.55"/>
+
+  <!-- Row 1 -->
+  <rect x="84" y="180" width="98" height="3" rx="1.5" fill="#0a2744" opacity="0.22"/>
+  <rect x="192" y="180" width="26" height="3" rx="1.5" fill="#0a2744" opacity="0.30"/>
+
+  <!-- Row 2 -->
+  <rect x="84" y="208" width="112" height="3" rx="1.5" fill="#0a2744" opacity="0.22"/>
+  <rect x="192" y="208" width="26" height="3" rx="1.5" fill="#0a2744" opacity="0.30"/>
+
+  <!-- Row 3 -->
+  <rect x="84" y="236" width="86" height="3" rx="1.5" fill="#0a2744" opacity="0.22"/>
+  <rect x="192" y="236" width="26" height="3" rx="1.5" fill="#0a2744" opacity="0.30"/>
+
+  <!-- Row 4 -->
+  <rect x="84" y="264" width="106" height="3" rx="1.5" fill="#0a2744" opacity="0.22"/>
+  <rect x="192" y="264" width="26" height="3" rx="1.5" fill="#0a2744" opacity="0.30"/>
+
+  <!-- Row 5 -->
+  <rect x="84" y="292" width="78" height="3" rx="1.5" fill="#0a2744" opacity="0.22"/>
+  <rect x="192" y="292" width="26" height="3" rx="1.5" fill="#0a2744" opacity="0.30"/>
+
+  <!-- Row 6 -->
+  <rect x="84" y="320" width="118" height="3" rx="1.5" fill="#0a2744" opacity="0.22"/>
+  <rect x="192" y="320" width="26" height="3" rx="1.5" fill="#0a2744" opacity="0.30"/>
+
+  <!-- Total line (bold) -->
+  <rect x="84" y="348" width="134" height="4" rx="2" fill="#0a2744" opacity="0.55"/>
+
+  <!-- ── Right page: big bold checkmark (balanced books) ── -->
+  <!-- Checkmark shadow -->
+  <polyline points="302,256 344,314 420,186"
+            stroke="#0a2744" stroke-width="30" fill="none"
+            stroke-linecap="round" stroke-linejoin="round" opacity="0.12"/>
+  <!-- Checkmark main -->
+  <polyline points="302,256 344,314 420,186"
+            stroke="#1a7a4a" stroke-width="26" fill="none"
+            stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Checkmark highlight -->
+  <polyline points="302,256 344,314 420,186"
+            stroke="#34c87a" stroke-width="10" fill="none"
+            stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>
+
+  <!-- ── Bottom band: "BB" monogram ── -->
+  <!-- Gold pill behind text -->
+  <rect x="188" y="412" width="136" height="48" rx="24" fill="#c8a232" opacity="0.20"/>
+  <!-- "BB" lettering -->
+  <text x="256" y="452"
+        font-family="Georgia, 'Times New Roman', serif"
+        font-size="54" font-weight="bold" letter-spacing="6"
+        fill="#f0c040" text-anchor="middle" opacity="0.97">BB</text>
+</svg>

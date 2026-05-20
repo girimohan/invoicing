@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "electron:dev": "concurrently \"next dev\" \"wait-on http://localhost:3000 && cross-env NODE_ENV=development electron .\"",
+    "generate-icons": "node scripts/generate-icons.js",
     "electron:build": "next build && electron-builder",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
@@ -31,17 +32,22 @@
       {
         "from": "prisma",
         "to": "prisma",
-        "filter": ["schema.prisma", "*.db"]
+        "filter": [
+          "schema.prisma",
+          "*.db"
+        ]
       }
     ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "public/icon.ico"
     },
     "mac": {
       "target": "dmg"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "icon": "public/icon.png"
     }
   },
   "dependencies": {
@@ -61,8 +67,10 @@
     "cross-env": "^10.1.0",
     "electron": "^42.2.0",
     "electron-builder": "^26.8.1",
+    "png-to-ico": "^3.0.1",
     "postcss": "^8.4.39",
     "prisma": "^5.16.0",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.4",
     "typescript": "^5.5.3",
     "wait-on": "^9.0.10"
