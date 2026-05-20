@@ -13,7 +13,7 @@ out/
 # SQLite database (contains personal data — do not commit)
 prisma/dev.db
 prisma/dev.db-journal
-prisma/seed.db
+# seed.db is the schema-only template (no user data) — intentionally committed
 
 # Electron build output (large binaries — distribute separately)
 dist-electron/
