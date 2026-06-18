@@ -5,8 +5,10 @@ export interface LineItemInput {
   description: string
   earnedAmount: number   // gross amount from Wolt (excl. VAT)
   sharePercent: number   // % of work done by this worker (0-100)
+  shareType: 'PERCENT' | 'AMOUNT'  // how the worker share is expressed
+  shareAmount: number   // flat € amount per payout (used when shareType = 'AMOUNT')
   vatRate: number
-  amountExVat: number    // earnedAmount × sharePercent / 100
+  amountExVat: number    // earnedAmount × sharePercent/100  OR  shareAmount
   vatAmount: number
   totalAmount: number
   sortOrder: number
@@ -75,6 +77,8 @@ export interface LineItemRow {
   description: string
   earnedAmount: string   // gross amount from Wolt (excl. VAT)
   sharePercent: string   // % of work done by this worker
+  shareType: 'PERCENT' | 'AMOUNT'  // how the worker share is expressed
+  shareAmount: string   // flat € amount per payout (used when shareType = 'AMOUNT')
   vatRate: string
 }
 

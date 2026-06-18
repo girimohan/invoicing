@@ -1,6 +1,7 @@
 ﻿'use client'
 
 import { useState, useEffect, useTransition, useCallback } from 'react'
+import VehicleTab from '@/components/VehicleTab'
 import {
   getOwnerBooks,
   createOwnerIncomePeriod,
@@ -11,7 +12,7 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Client = { id: number; displayId: string; name: string; role: string }
+type Client = { id: number; displayId: string; name: string; role: string; invoiceCount?: number; buyerInvoiceCount?: number }
 
 type IncomePeriod = {
   id: string
@@ -20,6 +21,7 @@ type IncomePeriod = {
   description: string | null
   woltInvoiceRef: string | null
   totalExVat: number
+  tipsExVat: number
   vatRate: number
   vatAmount: number
   totalIncVat: number
@@ -59,7 +61,18 @@ type LinkedInvoice = {
   lineItems: LineItem[]
 }
 
-type Tab = 'income' | 'expenses' | 'vat' | 'tax'
+type BookkeeperInvoice = {
+  id: string
+  invoiceNumber: string
+  issueDate: Date
+  clientName: string
+  amountExVat: number
+  vatRate: number
+  vatAmount: number
+  totalIncVat: number
+}
+
+type Tab = 'income' | 'expenses' | 'vat' | 'tax' | 'vehicle'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -72,6 +85,8 @@ const EXPENSE_CATEGORIES: { value: string; label: string }[] = [
   { value: 'MARKETING',      label: 'Markkinointi / Marketing' },
   { value: 'OFFICE',         label: 'Toimistokulut / Office' },
   { value: 'BOOKKEEPING',    label: 'Kirjanpito / Bookkeeping services' },
+  { value: 'SUBSTITUTE_PAYMENT', label: 'Korvaus sijaiselle / Substitute payment' },
+  { value: 'TIPS',           label: 'Tippit maksettu / Tips paid out' },
   { value: 'OTHER',          label: 'Muut kulut / Other' },
 ]
 
@@ -100,6 +115,7 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [linkedInvoices, setLinkedInvoices] = useState<LinkedInvoice[]>([])
   const [sellerInvoices, setSellerInvoices] = useState<LinkedInvoice[]>([])
+  const [bookkeeperInvoices, setBookkeeperInvoices] = useState<BookkeeperInvoice[]>([])
   const [showAddIncome, setShowAddIncome] = useState(false)
   const [showAddExpense, setShowAddExpense] = useState(false)
   const [expandWorkerInvoices, setExpandWorkerInvoices] = useState(false)
@@ -107,7 +123,7 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
 
   const [incomeForm, setIncomeForm] = useState({
     periodStart: '', periodEnd: '', woltInvoiceRef: '', description: '',
-    totalExVat: '', vatRate: '25.5', notes: '',
+    totalExVat: '', tipsExVat: '', vatRate: '25.5', notes: '',
   })
 
   const [expenseForm, setExpenseForm] = useState({
@@ -118,13 +134,14 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
   useEffect(() => {
     if (selectedClientId === null) return
     setLoading(true)
-    setIncomes([]); setExpenses([]); setLinkedInvoices([]); setSellerInvoices([])
+    setIncomes([]); setExpenses([]); setLinkedInvoices([]); setSellerInvoices([]); setBookkeeperInvoices([])
     getOwnerBooks(selectedClientId, selectedYear)
-      .then(({ incomes, expenses, linkedInvoices, sellerInvoices }) => {
+      .then(({ incomes, expenses, linkedInvoices, sellerInvoices, bookkeeperInvoices }) => {
         setIncomes(incomes as IncomePeriod[])
         setExpenses(expenses as Expense[])
         setLinkedInvoices(linkedInvoices as unknown as LinkedInvoice[])
         setSellerInvoices(sellerInvoices as unknown as LinkedInvoice[])
+        setBookkeeperInvoices((bookkeeperInvoices ?? []) as unknown as BookkeeperInvoice[])
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -143,10 +160,16 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
   const workerCostExVat          = r2(linkedInvoices.reduce((s, i) => s + i.totalExVat, 0))
   const workerCostVat            = r2(linkedInvoices.reduce((s, i) => s + i.totalVat, 0))
 
+  // ── Bookkeeper invoice income (Mohan's bookkeeping fees to clients) ───────────────────
+  const bkIncomeExVat = r2(bookkeeperInvoices.reduce((s, i) => s + i.amountExVat, 0))
+  const bkIncomeVat   = r2(bookkeeperInvoices.reduce((s, i) => s + i.vatAmount, 0))
+
   // ── Manual own-work income (account holders, periods they personally delivered) ──
-  const totalIncomeExVat = r2(incomes.reduce((s, i) => s + i.totalExVat, 0))
-  const totalIncomeVat   = r2(incomes.reduce((s, i) => s + i.vatAmount, 0))
-  const totalIncomeGross = r2(incomes.reduce((s, i) => s + i.totalIncVat, 0))
+  const totalIncomeExVat  = r2(incomes.reduce((s, i) => s + i.totalExVat, 0))
+  const totalIncomeTips   = r2(incomes.reduce((s, i) => s + (i.tipsExVat ?? 0), 0))
+  const totalIncomeVat    = r2(incomes.reduce((s, i) => s + i.vatAmount, 0))
+  // totalIncVat already includes tips (stored correctly in DB)
+  const totalIncomeGross  = r2(incomes.reduce((s, i) => s + i.totalIncVat, 0))
 
   // ── Substitute worker invoice income ──────────────────────────────────────
   const sellerIncomeExVat = r2(sellerInvoices.reduce((s, i) => s + i.totalExVat, 0))
@@ -155,21 +178,20 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
   const otherExpExVat = r2(expenses.reduce((s, e) => s + e.amountExVat, 0))
   const otherExpVat   = r2(expenses.reduce((s, e) => s + e.vatAmount, 0))
 
-  // incomeExVat: account holder = own work + net owner cut from substitute periods
+  // incomeExVat: account holder = own Wolt fees + tips + net owner cut + bookkeeping fees
   //              substitute     = invoice income
   // ownerCutExVat already NETS out the worker payment, so NO double subtraction
   const incomeExVat = isAccountHolder
-    ? r2(totalIncomeExVat + ownerCutExVat)
+    ? r2(totalIncomeExVat + totalIncomeTips + ownerCutExVat + bkIncomeExVat)
     : sellerIncomeExVat
 
   const netProfit = r2(incomeExVat - otherExpExVat)
 
   // VAT filing:
-  // Account holder output = VAT on own income + VAT on FULL Wolt gross for sub periods
+  // Account holder output = VAT on own Wolt income + VAT on FULL Wolt gross for sub periods + bookkeeping VAT
   //           input  = worker invoice VAT (deductible) + other expense VAT
-  // Net = output - input  (mathematically equals ownerCutVat + totalIncomeVat - otherExpVat)
   const filingOutputVat = isAccountHolder
-    ? r2(totalIncomeVat + woltOutputVatFromSubs)
+    ? r2(totalIncomeVat + woltOutputVatFromSubs + bkIncomeVat)
     : sellerIncomeVat
   const filingInputVat = isAccountHolder
     ? r2(workerCostVat + otherExpVat)
@@ -181,18 +203,20 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
     const ql = linkedInvoices.filter(i => getQuarter(i.invoiceDate) === q)
     const qs = sellerInvoices.filter(i => getQuarter(i.invoiceDate) === q)
     const qe = expenses.filter(e => getQuarter(e.date) === q)
+    const qbk = bookkeeperInvoices.filter(i => getQuarter(i.issueDate) === q)
     const qlItems = ql.flatMap(i => i.lineItems)
     if (isAccountHolder) {
       const outVatOwn  = r2(qi.reduce((s, i) => s + i.vatAmount, 0))
       const outVatSubs = r2(qlItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0))
-      const outVat     = r2(outVatOwn + outVatSubs)
+      const outVatBk   = r2(qbk.reduce((s, i) => s + i.vatAmount, 0))
+      const outVat     = r2(outVatOwn + outVatSubs + outVatBk)
       const inVatW     = r2(ql.reduce((s, i) => s + i.totalVat, 0))
       const inVatE     = r2(qe.reduce((s, e) => s + e.vatAmount, 0))
-      return { outVat, outVatOwn, outVatSubs, inVatW, inVatE, net: r2(outVat - inVatW - inVatE) }
+      return { outVat, outVatOwn, outVatSubs, outVatBk, inVatW, inVatE, net: r2(outVat - inVatW - inVatE) }
     } else {
       const outVat = r2(qs.reduce((s, i) => s + i.totalVat, 0))
       const inVatE = r2(qe.reduce((s, e) => s + e.vatAmount, 0))
-      return { outVat, outVatOwn: 0, outVatSubs: 0, inVatW: 0, inVatE, net: r2(outVat - inVatE) }
+      return { outVat, outVatOwn: 0, outVatSubs: 0, outVatBk: 0, inVatW: 0, inVatE, net: r2(outVat - inVatE) }
     }
   }
 
@@ -211,13 +235,14 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
         woltInvoiceRef: incomeForm.woltInvoiceRef,
         description: incomeForm.description,
         totalExVat: parseFloat(incomeForm.totalExVat),
+        tipsExVat: incomeForm.tipsExVat ? parseFloat(incomeForm.tipsExVat) : 0,
         vatRate: parseFloat(incomeForm.vatRate),
         notes: incomeForm.notes,
       })
       setIncomes((prev) => [...prev, rec as IncomePeriod].sort(
         (a, b) => new Date(a.periodStart).getTime() - new Date(b.periodStart).getTime()
       ))
-      setIncomeForm({ periodStart: '', periodEnd: '', woltInvoiceRef: '', description: '', totalExVat: '', vatRate: '25.5', notes: '' })
+      setIncomeForm({ periodStart: '', periodEnd: '', woltInvoiceRef: '', description: '', totalExVat: '', tipsExVat: '', vatRate: '25.5', notes: '' })
       setShowAddIncome(false)
     })
   }, [selectedClientId, incomeForm])
@@ -308,8 +333,16 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                     c.role === 'SUBSTITUTE_WORKER' ? 'bg-purple-100 text-purple-700' : 'bg-indigo-100 text-indigo-700'
                   }`}>{c.role === 'SUBSTITUTE_WORKER' ? 'Substitute Worker' : 'Account Holder'}</span>
                 </div>
-                <div className="text-base font-bold text-gray-800 mb-1">{c.name}</div>
-                <div className="text-[10px] text-indigo-500 font-semibold group-hover:text-indigo-700 mt-2">View books →</div>
+                <div className="text-base font-bold text-gray-800 mb-2">{c.name}</div>
+                <div className="flex items-center justify-between mt-1">
+                  <span className="text-[10px] text-gray-400">
+                    {c.role === 'SUBSTITUTE_WORKER'
+                      ? <>{(c.invoiceCount ?? 0)} invoice{(c.invoiceCount ?? 0) !== 1 ? 's' : ''} sent</>
+                      : <>{(c.buyerInvoiceCount ?? 0)} invoice{(c.buyerInvoiceCount ?? 0) !== 1 ? 's' : ''} received</>
+                    }
+                  </span>
+                  <span className="text-[10px] text-indigo-500 font-semibold group-hover:text-indigo-700">View books →</span>
+                </div>
               </button>
             ))}
           </div>
@@ -342,8 +375,13 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                   {linkedInvoices.length > 0 ? 'Net Revenue (ex-VAT)' : 'Wolt Income (ex-VAT)'}
                 </div>
                 <div className="text-xl font-bold text-green-700 font-mono">{fmt(incomeExVat)} €</div>
-                {linkedInvoices.length > 0 && (
-                  <div className="text-[10px] text-gray-400 mt-1">Own {fmt(totalIncomeExVat)} + Cut {fmt(ownerCutExVat)}</div>
+                {(linkedInvoices.length > 0 || bookkeeperInvoices.length > 0 || totalIncomeTips > 0) && (
+                  <div className="text-[10px] text-gray-400 mt-1">
+                    Fees {fmt(totalIncomeExVat)}
+                    {totalIncomeTips > 0 && <> + Tips {fmt(totalIncomeTips)}</>}
+                    {ownerCutExVat > 0 && <> + Sub cut {fmt(ownerCutExVat)}</>}
+                    {bkIncomeExVat > 0 && <> + BK {fmt(bkIncomeExVat)}</>}
+                  </div>
                 )}
               </div>
               {linkedInvoices.length > 0 ? (
@@ -395,6 +433,7 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
               { key: 'expenses', label: 'Expenses' },
               { key: 'vat',      label: 'VAT Summary' },
               { key: 'tax',      label: 'Tax Return' },
+              { key: 'vehicle',  label: 'Vehicle & Mileage' },
             ] as { key: Tab; label: string }[]).map((t) => (
               <button key={t.key} onClick={() => setActiveTab(t.key)}
                 className={`px-4 py-2.5 text-xs font-semibold border-b-2 transition-colors -mb-px ${
@@ -447,8 +486,10 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                         const gross   = r2(inv.lineItems.reduce((s, li) => s + li.earnedAmount, 0))
                         const paid    = inv.totalExVat
                         const cut     = r2(gross - paid)
-                        const avgSh   = gross > 0
-                          ? Math.round(inv.lineItems.reduce((s, li) => s + li.sharePercent * li.earnedAmount, 0) / gross)
+                        const shItems = inv.lineItems.filter(li => li.sharePercent < 100)
+                        const shGross = r2(shItems.reduce((s, li) => s + li.earnedAmount, 0))
+                        const avgSh   = shGross > 0
+                          ? Math.round(shItems.reduce((s, li) => s + li.sharePercent * li.earnedAmount, 0) / shGross)
                           : Math.round(inv.lineItems[0]?.sharePercent ?? 0)
                         return (
                           <tr key={inv.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
@@ -531,9 +572,17 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                         <input type="number" step="0.01" min="0" placeholder="0.00" value={incomeForm.totalExVat}
                           onChange={(e) => setIncomeForm((p) => ({ ...p, totalExVat: e.target.value }))}
                           className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs" />
+                        <span className="text-[9px] text-gray-400">Courier fees — taxable at {incomeForm.vatRate}%</span>
                       </div>
                       <div>
-                        <label className="block text-[10px] font-semibold text-gray-600 mb-1">VAT Rate %</label>
+                        <label className="block text-[10px] font-semibold text-gray-600 mb-1">Tips (€) <span className="text-gray-400 font-normal">0% VAT</span></label>
+                        <input type="number" step="0.01" min="0" placeholder="0.00" value={incomeForm.tipsExVat}
+                          onChange={(e) => setIncomeForm((p) => ({ ...p, tipsExVat: e.target.value }))}
+                          className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs" />
+                        <span className="text-[9px] text-gray-400">Tips are VAT-exempt — no VAT charged</span>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-semibold text-gray-600 mb-1">VAT Rate % <span className="text-gray-400 font-normal">(courier fees)</span></label>
                         <select value={incomeForm.vatRate}
                           onChange={(e) => setIncomeForm((p) => ({ ...p, vatRate: e.target.value }))}
                           className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs bg-white">
@@ -543,20 +592,29 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                           <option value="0">0%</option>
                         </select>
                       </div>
-                      <div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 mb-3">
+                      <div className="col-span-3">
                         <label className="block text-[10px] font-semibold text-gray-600 mb-1">Description</label>
                         <input type="text" placeholder="e.g. April 1–15 courier fees" value={incomeForm.description}
                           onChange={(e) => setIncomeForm((p) => ({ ...p, description: e.target.value }))}
                           className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs" />
                       </div>
                     </div>
-                    {incomeForm.totalExVat && (
-                      <div className="text-xs text-green-700 bg-green-100 rounded px-3 py-1.5 mb-3 font-mono">
-                        {fmt(parseFloat(incomeForm.totalExVat)||0)} € +
-                        {fmt((parseFloat(incomeForm.totalExVat)||0)*parseFloat(incomeForm.vatRate)/100)} € VAT =
-                        {fmt((parseFloat(incomeForm.totalExVat)||0)*(1+parseFloat(incomeForm.vatRate)/100))} € total
-                      </div>
-                    )}
+                    {(incomeForm.totalExVat || incomeForm.tipsExVat) && (() => {
+                      const fees = parseFloat(incomeForm.totalExVat) || 0
+                      const tips = parseFloat(incomeForm.tipsExVat) || 0
+                      const vat = parseFloat(incomeForm.vatRate) || 0
+                      const vatAmt = Math.round(fees * vat / 100 * 100) / 100
+                      const total = fees + vatAmt + tips
+                      return (
+                        <div className="text-xs text-green-700 bg-green-100 rounded px-3 py-1.5 mb-3 font-mono flex gap-4 flex-wrap">
+                          <span>Fees: {fmt(fees)} + VAT {fmt(vatAmt)} = {fmt(fees + vatAmt)} €</span>
+                          {tips > 0 && <span>+ Tips (0% VAT): {fmt(tips)} €</span>}
+                          <span className="font-bold">Total payout: {fmt(total)} €</span>
+                        </div>
+                      )
+                    })()}
                     <div className="flex justify-end">
                       <button onClick={handleSaveIncome} disabled={isPending}
                         className="bg-green-700 text-white text-xs px-4 py-1.5 rounded font-semibold hover:bg-green-800 disabled:opacity-50">
@@ -579,7 +637,8 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                         <tr>
                           <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Period</th>
                           <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Wolt Reference</th>
-                          <th className="text-right px-4 py-2.5 font-semibold text-gray-600">Ex-VAT €</th>
+                          <th className="text-right px-4 py-2.5 font-semibold text-gray-600">Fees ex-VAT €</th>
+                          <th className="text-right px-4 py-2.5 font-semibold text-gray-600">Tips (0%) €</th>
                           <th className="text-right px-4 py-2.5 font-semibold text-gray-600">VAT %</th>
                           <th className="text-right px-4 py-2.5 font-semibold text-gray-600">VAT €</th>
                           <th className="text-right px-4 py-2.5 font-semibold text-gray-600">Total €</th>
@@ -595,6 +654,9 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                             </td>
                             <td className="px-4 py-2.5 text-gray-500 font-mono text-[11px]">{inc.woltInvoiceRef || '—'}</td>
                             <td className="px-4 py-2.5 text-right font-mono">{fmt(inc.totalExVat)}</td>
+                            <td className="px-4 py-2.5 text-right font-mono text-teal-600">
+                              {(inc.tipsExVat ?? 0) > 0 ? fmt(inc.tipsExVat) : <span className="text-gray-300">—</span>}
+                            </td>
                             <td className="px-4 py-2.5 text-right text-gray-500">{inc.vatRate}%</td>
                             <td className="px-4 py-2.5 text-right font-mono text-orange-600">{fmt(inc.vatAmount)}</td>
                             <td className="px-4 py-2.5 text-right font-mono font-semibold">{fmt(inc.totalIncVat)}</td>
@@ -609,6 +671,7 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                         <tr>
                           <td colSpan={2} className="px-4 py-2.5 text-xs font-bold text-green-700">Total</td>
                           <td className="px-4 py-2.5 text-right font-bold font-mono text-green-700">{fmt(totalIncomeExVat)}</td>
+                          <td className="px-4 py-2.5 text-right font-bold font-mono text-teal-600">{totalIncomeTips > 0 ? fmt(totalIncomeTips) : '—'}</td>
                           <td></td>
                           <td className="px-4 py-2.5 text-right font-bold font-mono text-orange-600">{fmt(totalIncomeVat)}</td>
                           <td className="px-4 py-2.5 text-right font-bold font-mono text-green-700">{fmt(totalIncomeGross)}</td>
@@ -672,8 +735,10 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                     <tbody>
                       {sellerInvoices.map((inv, idx) => {
                         const gross  = r2(inv.lineItems.reduce((s, li) => s + li.earnedAmount, 0))
-                        const avgSh  = gross > 0
-                          ? Math.round(inv.lineItems.reduce((s, li) => s + li.sharePercent * li.earnedAmount, 0) / gross)
+                        const shItems = inv.lineItems.filter(li => li.sharePercent < 100)
+                        const shGross = r2(shItems.reduce((s, li) => s + li.earnedAmount, 0))
+                        const avgSh  = shGross > 0
+                          ? Math.round(shItems.reduce((s, li) => s + li.sharePercent * li.earnedAmount, 0) / shGross)
                           : Math.round(inv.lineItems[0]?.sharePercent ?? 0)
                         return (
                           <tr key={inv.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
@@ -750,8 +815,10 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                         <tbody>
                           {linkedInvoices.map((inv, idx) => {
                             const gross = r2(inv.lineItems.reduce((s, li) => s + li.earnedAmount, 0))
-                            const avgSh = gross > 0
-                              ? Math.round(inv.lineItems.reduce((s, li) => s + li.sharePercent * li.earnedAmount, 0) / gross)
+                            const shItems = inv.lineItems.filter(li => li.sharePercent < 100)
+                            const shGross = r2(shItems.reduce((s, li) => s + li.earnedAmount, 0))
+                            const avgSh = shGross > 0
+                              ? Math.round(shItems.reduce((s, li) => s + li.sharePercent * li.earnedAmount, 0) / shGross)
                               : Math.round(inv.lineItems[0]?.sharePercent ?? 0)
                             return (
                               <tr key={inv.id} className={`border-t border-gray-100 ${idx % 2 !== 0 ? 'bg-gray-50' : ''}`}>
@@ -967,6 +1034,11 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                             Output VAT<br/><span className="text-[10px] font-normal text-gray-400">Sub periods</span>
                           </th>
                         )}
+                        {bookkeeperInvoices.length > 0 && (
+                          <th className="text-right px-3 py-3 font-semibold text-teal-700">
+                            Output VAT<br/><span className="text-[10px] font-normal text-gray-400">BK services</span>
+                          </th>
+                        )}
                         <th className="text-right px-3 py-3 font-semibold text-green-800">
                           Total Output<br/><span className="text-[10px] font-normal text-gray-400">to remit</span>
                         </th>
@@ -993,6 +1065,7 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                             <td className="px-4 py-3 font-semibold">Q{q} <span className="font-normal text-gray-500">{labels[q-1]}</span></td>
                             <td className="px-3 py-3 text-right font-mono text-green-700">{fmt(d.outVatOwn)}</td>
                             {linkedInvoices.length > 0 && <td className="px-3 py-3 text-right font-mono text-indigo-600">{fmt(d.outVatSubs)}</td>}
+                            {bookkeeperInvoices.length > 0 && <td className="px-3 py-3 text-right font-mono text-teal-700">{fmt(d.outVatBk)}</td>}
                             <td className="px-3 py-3 text-right font-mono font-bold text-green-800">{fmt(d.outVat)}</td>
                             {linkedInvoices.length > 0 && <td className="px-3 py-3 text-right font-mono text-orange-600">{fmt(d.inVatW)}</td>}
                             <td className="px-3 py-3 text-right font-mono text-red-600">{fmt(d.inVatE)}</td>
@@ -1006,6 +1079,7 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                         <td className="px-4 py-3 font-bold text-gray-700">Annual Total</td>
                         <td className="px-3 py-3 text-right font-bold font-mono text-green-700">{fmt(totalIncomeVat)}</td>
                         {linkedInvoices.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-indigo-600">{fmt(woltOutputVatFromSubs)}</td>}
+                        {bookkeeperInvoices.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-teal-700">{fmt(bkIncomeVat)}</td>}
                         <td className="px-3 py-3 text-right font-bold font-mono text-green-800">{fmt(filingOutputVat)}</td>
                         {linkedInvoices.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-orange-600">{fmt(workerCostVat)}</td>}
                         <td className="px-3 py-3 text-right font-bold font-mono text-red-600">{fmt(otherExpVat)}</td>
@@ -1154,6 +1228,13 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                 {' '}Taxable profit = <strong>{fmt(netProfit)} €</strong>.
               </div>
             </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {/* VEHICLE & MILEAGE TAB                                          */}
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {!loading && activeTab === 'vehicle' && (
+            <VehicleTab clientId={selectedClientId!} year={selectedYear} />
           )}
 
         </div>

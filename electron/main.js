@@ -1,13 +1,20 @@
 const { app, BrowserWindow, shell } = require('electron')
 const path = require('path')
 const { spawn } = require('child_process')
-const { existsSync, copyFileSync, mkdirSync } = require('fs')
+const { existsSync, copyFileSync, mkdirSync, statSync } = require('fs')
 const http = require('http')
+const net = require('net')
+
+// ── Lock userData to the product name folder, regardless of package.json name ─
+// Without this, Electron uses package.json "name" ("wolt-substitute-invoice")
+// as the userData folder, so each build might use a different path.
+app.setPath('userData', path.join(app.getPath('appData'), 'Barmo Bookkeeping'))
 
 const isDev = process.env.NODE_ENV === 'development'
-const PORT = 3000
+const DEV_PORT = 3000
 
 let nextProcess = null
+let activePort = DEV_PORT
 
 // ── Single-instance lock ──────────────────────────────────────────────────────
 // Without this, clicking the exe again while it's already running would open a
@@ -30,7 +37,9 @@ function initDatabase() {
   const userDataDir = app.getPath('userData')
   const dbDest = path.join(userDataDir, 'dev.db')
 
-  if (!existsSync(dbDest)) {
+  // Copy seed DB if the file doesn't exist OR is empty (0 bytes from a failed previous init)
+  const needsSeed = !existsSync(dbDest) || statSync(dbDest).size === 0
+  if (needsSeed) {
     const seedDb = path.join(process.resourcesPath, 'prisma', 'seed.db')
     if (existsSync(seedDb)) {
       mkdirSync(userDataDir, { recursive: true })
@@ -44,12 +53,27 @@ function initDatabase() {
   return dbDest
 }
 
+// ── Find a free TCP port starting from `start` ───────────────────────────────
+function getFreePort(start = 3847) {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer()
+    server.listen(start, '127.0.0.1', () => {
+      const port = server.address().port
+      server.close(() => resolve(port))
+    })
+    server.on('error', () => {
+      if (start < 4100) getFreePort(start + 1).then(resolve).catch(reject)
+      else reject(new Error('No free port found in range 3847-4100'))
+    })
+  })
+}
+
 // ── Wait until the Next.js HTTP server is accepting connections ──────────────
-function waitForServer(retries = 60) {
+function waitForServer(port, retries = 60) {
   return new Promise((resolve, reject) => {
     let attempts = 0
     const check = () => {
-      http.get(`http://localhost:${PORT}`, () => resolve())
+      http.get(`http://localhost:${port}`, () => resolve())
         .on('error', () => {
           if (++attempts >= retries) return reject(new Error('Next.js server did not start in time'))
           setTimeout(check, 500)
@@ -60,10 +84,12 @@ function waitForServer(retries = 60) {
 }
 
 // ── Start the bundled Next.js standalone server (production only) ────────────
-function startNextServer() {
-  if (isDev) return Promise.resolve()
+async function startNextServer() {
+  if (isDev) return
 
   const dbPath = initDatabase()
+  const port = await getFreePort(3847)
+  activePort = port
 
   const standaloneDir = path.join(process.resourcesPath, 'app', '.next', 'standalone')
   const serverScript = path.join(standaloneDir, 'server.js')
@@ -77,7 +103,7 @@ function startNextServer() {
       // Electron window, which would spawn another server, which would open
       // another window — recursively producing hundreds of windows.
       ELECTRON_RUN_AS_NODE: '1',
-      PORT: String(PORT),
+      PORT: String(port),
       NODE_ENV: 'production',
       DATABASE_URL: `file:${dbPath}`,
     },
@@ -85,7 +111,7 @@ function startNextServer() {
   })
 
   nextProcess.on('error', (err) => console.error('Next.js process error:', err))
-  return waitForServer()
+  return waitForServer(port)
 }
 
 // ── Create the browser window ─────────────────────────────────────────────────
@@ -110,7 +136,11 @@ function createWindow() {
     return { action: 'deny' }
   })
 
-  win.loadURL(`http://localhost:${PORT}`)
+  const loadUrl = isDev
+    ? `http://localhost:${DEV_PORT}`
+    : `http://localhost:${activePort}`
+
+  win.loadURL(loadUrl)
 }
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────

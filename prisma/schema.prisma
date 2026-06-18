@@ -77,6 +77,11 @@ model Client {
   bic          String?
   notes         String?
 
+  // Share preference for substitute worker invoices
+  shareType          String  @default("PERCENT") // "PERCENT" | "AMOUNT"
+  defaultSharePercent Float?  // e.g. 75 → worker gets 75% of Wolt gross
+  defaultShareAmount  Float?  // e.g. 250 → worker gets flat 250 € per line item
+
   invoices      Invoice[]           @relation("SellerInvoices")
   buyerInvoices Invoice[]           @relation("BuyerInvoices")
   incomePeriods OwnerIncomePeriod[]
@@ -98,6 +103,7 @@ model OwnerIncomePeriod {
   woltInvoiceRef String?   // e.g. FIN/26/3111862-6/1/1
 
   totalExVat     Float
+  tipsExVat      Float    @default(0)  // Tips income (0% VAT) for the same period
   vatRate        Float    @default(25.5)
   vatAmount      Float
   totalIncVat    Float
@@ -183,8 +189,12 @@ model LineItem {
   sharePercent Float   @default(100) // % of work done by this worker
   vatRate      Float                 // VAT rate as percentage (e.g. 25.5, 0)
 
+  // Share type (mirrors Client.shareType at time of invoice creation)
+  shareType   String  @default("PERCENT") // "PERCENT" | "AMOUNT"
+  shareAmount Float   @default(0)         // flat € amount (used when shareType = "AMOUNT")
+
   // Stored computed values
-  amountExVat Float   // earnedAmount × sharePercent / 100
+  amountExVat Float   // earnedAmount × sharePercent/100  OR  shareAmount directly
   vatAmount   Float
   totalAmount Float
 }

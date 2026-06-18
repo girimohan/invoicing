@@ -18,8 +18,13 @@ type Client = {
   iban: string | null
   bic: string | null
   notes: string | null
+  shareType: string
+  defaultSharePercent: number | null
+  defaultShareAmount: number | null
   createdAt: Date
   updatedAt: Date
+  invoiceCount?: number
+  buyerInvoiceCount?: number
 }
 
 type Props = {
@@ -41,6 +46,9 @@ const emptyForm = (nextDisplayId: string): ClientInput => ({
   iban: '',
   bic: '',
   notes: '',
+  shareType: 'PERCENT',
+  defaultSharePercent: undefined,
+  defaultShareAmount: undefined,
 })
 
 export default function ClientsManager({ clients: initial, nextDisplayId }: Props) {
@@ -99,6 +107,9 @@ export default function ClientsManager({ clients: initial, nextDisplayId }: Prop
       iban: client.iban ?? '',
       bic: client.bic ?? '',
       notes: client.notes ?? '',
+      shareType: client.shareType ?? 'PERCENT',
+      defaultSharePercent: client.defaultSharePercent ?? undefined,
+      defaultShareAmount: client.defaultShareAmount ?? undefined,
     })
     setError(null)
     setShowForm(true)
@@ -208,6 +219,59 @@ export default function ClientsManager({ clients: initial, nextDisplayId }: Prop
                 />
               </div>
             </div>
+
+            {/* ── Share preference (for Account Holders) ── */}
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-4">
+              <div className="text-[11px] font-bold text-orange-800 mb-2 uppercase tracking-wide">
+                Worker Share Default (Account Holder only)
+              </div>
+              <p className="text-[10px] text-orange-600 mb-3">
+                When creating invoices for this account holder, line items will use this share setting by default.
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="field">
+                  <label className="text-[10px]">Share Type</label>
+                  <select
+                    value={form.shareType ?? 'PERCENT'}
+                    onChange={(e) => set('shareType', e.target.value)}
+                    className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs"
+                  >
+                    <option value="PERCENT">% Percentage of Wolt gross</option>
+                    <option value="AMOUNT">€ Fixed amount per payout</option>
+                  </select>
+                </div>
+                {(form.shareType ?? 'PERCENT') === 'PERCENT' ? (
+                  <div className="field">
+                    <label className="text-[10px]">Default Share %</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={form.defaultSharePercent ?? ''}
+                      onChange={(e) => setForm((prev) => ({ ...prev, defaultSharePercent: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                      placeholder="e.g. 75"
+                      className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs"
+                    />
+                    <span className="text-[9px] text-orange-500">Worker keeps this % of each Wolt gross line</span>
+                  </div>
+                ) : (
+                  <div className="field">
+                    <label className="text-[10px]">Fixed Amount per Payout (€)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={form.defaultShareAmount ?? ''}
+                      onChange={(e) => setForm((prev) => ({ ...prev, defaultShareAmount: e.target.value ? parseFloat(e.target.value) : undefined }))}
+                      placeholder="e.g. 250.00"
+                      className="w-full border border-gray-200 rounded px-2 py-1.5 text-xs"
+                    />
+                    <span className="text-[9px] text-orange-500">Worker receives this flat amount regardless of Wolt gross</span>
+                  </div>
+                )}
+              </div>
+            </div>
             <div className="flex gap-2">
               <button
                 type="submit"
@@ -244,6 +308,8 @@ export default function ClientsManager({ clients: initial, nextDisplayId }: Prop
                 <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Business ID</th>
                 <th className="text-left px-4 py-2.5 font-semibold text-gray-600">City</th>
                 <th className="text-left px-4 py-2.5 font-semibold text-gray-600">Email / Phone</th>
+                <th className="text-center px-4 py-2.5 font-semibold text-gray-600 w-28">Worker Share</th>
+                <th className="text-center px-4 py-2.5 font-semibold text-gray-600 w-24">Invoices</th>
                 <th className="px-4 py-2.5 w-24"></th>
               </tr>
             </thead>
@@ -266,6 +332,28 @@ export default function ClientsManager({ clients: initial, nextDisplayId }: Prop
                       {client.email && <div>{client.email}</div>}
                       {client.phone && <div>{client.phone}</div>}
                       {!client.email && !client.phone && '—'}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      {client.role === 'ACCOUNT_HOLDER' ? (
+                        client.shareType === 'AMOUNT'
+                          ? <span className="bg-orange-100 text-orange-700 text-[10px] font-semibold px-2 py-0.5 rounded">
+                              € {client.defaultShareAmount ?? '?'}
+                            </span>
+                          : <span className="bg-blue-100 text-blue-700 text-[10px] font-semibold px-2 py-0.5 rounded">
+                              {client.defaultSharePercent != null ? `${client.defaultSharePercent}%` : '—'}
+                            </span>
+                      ) : <span className="text-gray-300">—</span>}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      {client.role === 'SUBSTITUTE_WORKER' ? (
+                        <span className="inline-flex items-center justify-center min-w-[1.5rem] bg-purple-100 text-purple-700 font-semibold text-[10px] px-1.5 py-0.5 rounded-full">
+                          {client.invoiceCount ?? 0}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center justify-center min-w-[1.5rem] bg-green-100 text-green-700 font-semibold text-[10px] px-1.5 py-0.5 rounded-full">
+                          {client.buyerInvoiceCount ?? 0}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-2.5 text-right">
                       <button

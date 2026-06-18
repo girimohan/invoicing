@@ -12,6 +12,7 @@ export interface OwnerIncomePeriodInput {
   description?: string
   woltInvoiceRef?: string
   totalExVat: number
+  tipsExVat?: number    // Tips income at 0% VAT
   vatRate: number
   notes?: string
 }
@@ -31,8 +32,10 @@ export interface OwnerExpenseInput {
 // ─── Income period actions ────────────────────────────────────────────────────
 
 export async function createOwnerIncomePeriod(data: OwnerIncomePeriodInput) {
+  const tipsExVat = data.tipsExVat ?? 0
   const vatAmount = Math.round(data.totalExVat * (data.vatRate / 100) * 100) / 100
-  const totalIncVat = Math.round((data.totalExVat + vatAmount) * 100) / 100
+  // Tips are 0% VAT — they are added at face value to the total
+  const totalIncVat = Math.round((data.totalExVat + vatAmount + tipsExVat) * 100) / 100
   const record = await db.ownerIncomePeriod.create({
     data: {
       clientId: data.clientId,
@@ -41,6 +44,7 @@ export async function createOwnerIncomePeriod(data: OwnerIncomePeriodInput) {
       description: data.description || null,
       woltInvoiceRef: data.woltInvoiceRef || null,
       totalExVat: data.totalExVat,
+      tipsExVat,
       vatRate: data.vatRate,
       vatAmount,
       totalIncVat,
@@ -101,6 +105,7 @@ export async function getOwnerBooks(clientId: number, year: number) {
   const bizId = clientRecord?.businessId ?? null
 
   const dateFilter = { invoiceDate: { gte: yearStart, lt: yearEnd } }
+  const bkDateFilter = { issueDate: { gte: yearStart, lt: yearEnd } }
 
   // Build OR conditions for seller-side and buyer-side invoice lookup
   const sellerCondition = bizId
@@ -111,7 +116,7 @@ export async function getOwnerBooks(clientId: number, year: number) {
     ? { OR: [{ buyerClientId: clientId }, { buyerBusinessId: bizId }], ...dateFilter }
     : { buyerClientId: clientId, ...dateFilter }
 
-  const [incomes, expenses, linkedInvoices, sellerInvoices] = await Promise.all([
+  const [incomes, expenses, linkedInvoices, sellerInvoices, bookkeeperInvoices] = await Promise.all([
     db.ownerIncomePeriod.findMany({
       where: { clientId, periodStart: { gte: yearStart, lt: yearEnd } },
       orderBy: { periodStart: 'asc' },
@@ -132,6 +137,13 @@ export async function getOwnerBooks(clientId: number, year: number) {
       include: { lineItems: { orderBy: { sortOrder: 'asc' } } },
       orderBy: { invoiceDate: 'asc' },
     }),
+    // Bookkeeper invoices ISSUED BY this client (Mohan as bookkeeper to his clients)
+    bizId
+      ? db.bookkeeperInvoice.findMany({
+          where: { bkBusinessId: bizId, ...bkDateFilter },
+          orderBy: { issueDate: 'asc' },
+        })
+      : Promise.resolve([]),
   ])
 
   // Deduplicate by id (OR conditions can theoretically match same invoice twice
@@ -144,5 +156,6 @@ export async function getOwnerBooks(clientId: number, year: number) {
     expenses,
     linkedInvoices: dedup(linkedInvoices),
     sellerInvoices: dedup(sellerInvoices),
+    bookkeeperInvoices,
   }
 }

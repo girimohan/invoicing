@@ -8,9 +8,14 @@ export function calculateInvoice(lineItems: LineItemRow[]): Calculated {
   const computed = lineItems.map((item) => {
     const earned = parseFloat(item.earnedAmount) || 0
     const share = parseFloat(item.sharePercent) ?? 100
+    const flatAmt = parseFloat(item.shareAmount) || 0
     const vatPct = parseFloat(item.vatRate) || 0
 
-    const amountExVat = round2(earned * share / 100)
+    // AMOUNT mode: worker receives a fixed euro amount (e.g. 250 €)
+    // PERCENT mode: worker receives a % of the Wolt gross
+    const amountExVat = item.shareType === 'AMOUNT'
+      ? round2(flatAmt)
+      : round2(earned * share / 100)
     const vatAmount = round2(amountExVat * (vatPct / 100))
     const totalAmount = round2(amountExVat + vatAmount)
 

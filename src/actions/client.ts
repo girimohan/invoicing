@@ -19,10 +19,16 @@ export type ClientInput = {
   iban?: string
   bic?: string
   notes?: string
+  shareType?: string          // 'PERCENT' | 'AMOUNT'
+  defaultSharePercent?: number
+  defaultShareAmount?: number
 }
 
 export async function getClients() {
-  const clients = await db.client.findMany({ orderBy: { displayId: 'asc' } })
+  const clients = await db.client.findMany({
+    orderBy: { displayId: 'asc' },
+    include: { _count: { select: { invoices: true, buyerInvoices: true } } },
+  })
   // Map to plain objects to ensure all fields (including role) are serialized in RSC payload
   return clients.map(c => ({
     id: c.id,
@@ -39,8 +45,13 @@ export async function getClients() {
     iban: c.iban,
     bic: c.bic,
     notes: c.notes,
+    shareType: c.shareType,
+    defaultSharePercent: c.defaultSharePercent,
+    defaultShareAmount: c.defaultShareAmount,
     createdAt: c.createdAt,
     updatedAt: c.updatedAt,
+    invoiceCount: c._count.invoices,
+    buyerInvoiceCount: c._count.buyerInvoices,
   }))
 }
 
@@ -75,6 +86,9 @@ export async function createClient(data: ClientInput) {
       iban: data.iban || null,
       bic: data.bic || null,
       notes: data.notes || null,
+      shareType: data.shareType || 'PERCENT',
+      defaultSharePercent: data.defaultSharePercent ?? null,
+      defaultShareAmount: data.defaultShareAmount ?? null,
     },
   })
   revalidatePath('/clients')
@@ -98,6 +112,9 @@ export async function updateClient(id: number, data: ClientInput) {
       iban: data.iban || null,
       bic: data.bic || null,
       notes: data.notes || null,
+      shareType: data.shareType || 'PERCENT',
+      defaultSharePercent: data.defaultSharePercent ?? null,
+      defaultShareAmount: data.defaultShareAmount ?? null,
     },
   })
   revalidatePath('/clients')

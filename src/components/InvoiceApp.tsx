@@ -62,6 +62,9 @@ type ClientOption = {
   phone: string | null
   iban?: string | null
   bic?: string | null
+  shareType?: string | null
+  defaultSharePercent?: number | null
+  defaultShareAmount?: number | null
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -79,9 +82,9 @@ function addDays(isoDate: string, days: number): string {
 }
 
 const defaultLineItems: LineItemRow[] = [
-  { id: '1', description: 'Wolt Courier Fees', earnedAmount: '', sharePercent: '75', vatRate: '25.5' },
-  { id: '2', description: 'Tips', earnedAmount: '', sharePercent: '100', vatRate: '0' },
-  { id: '3', description: 'Others (if any)', earnedAmount: '', sharePercent: '75', vatRate: '25.5' },
+  { id: '1', description: 'Wolt Courier Fees', earnedAmount: '', sharePercent: '75', shareType: 'PERCENT', shareAmount: '', vatRate: '25.5' },
+  { id: '2', description: 'Tips', earnedAmount: '', sharePercent: '100', shareType: 'PERCENT', shareAmount: '', vatRate: '0' },
+  { id: '3', description: 'Others (if any)', earnedAmount: '', sharePercent: '75', shareType: 'PERCENT', shareAmount: '', vatRate: '25.5' },
 ]
 
 function toDateStr(d: Date | string | null | undefined): string {
@@ -169,6 +172,8 @@ export default function InvoiceApp({
           description: li.description,
           earnedAmount: String(li.earnedAmount),
           sharePercent: String(li.sharePercent),
+          shareType: ((li as { shareType?: string }).shareType ?? 'PERCENT') as 'PERCENT' | 'AMOUNT',
+          shareAmount: String((li as { shareAmount?: number }).shareAmount ?? 0),
           vatRate: String(li.vatRate),
         }))
       : defaultLineItems
@@ -245,6 +250,8 @@ export default function InvoiceApp({
         description: '',
         earnedAmount: '',
         sharePercent: '75',
+        shareType: 'PERCENT',
+        shareAmount: '',
         vatRate: '25.5',
       },
     ])
@@ -354,6 +361,19 @@ export default function InvoiceApp({
       buyerBusinessId: c.businessId ?? '',
       buyerVatId: c.vatId ?? '',
     }))
+    // Apply the account holder's share preference to all current line items
+    if (c.shareType) {
+      setLineItems((prev) => prev.map((li) => ({
+        ...li,
+        shareType: (c.shareType ?? 'PERCENT') as 'PERCENT' | 'AMOUNT',
+        sharePercent: c.shareType === 'PERCENT' && c.defaultSharePercent != null
+          ? String(c.defaultSharePercent)
+          : li.sharePercent,
+        shareAmount: c.shareType === 'AMOUNT' && c.defaultShareAmount != null
+          ? String(c.defaultShareAmount)
+          : li.shareAmount,
+      })))
+    }
   }, [holders])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -418,6 +438,8 @@ export default function InvoiceApp({
             description: item.description,
             earnedAmount: parseFloat(item.earnedAmount) || 0,
             sharePercent: parseFloat(item.sharePercent) ?? 100,
+            shareType: item.shareType ?? 'PERCENT',
+            shareAmount: parseFloat(item.shareAmount) || 0,
             vatRate: parseFloat(item.vatRate) || 0,
             amountExVat: calculated.lineItems[idx]?.amountExVat ?? 0,
             vatAmount: calculated.lineItems[idx]?.vatAmount ?? 0,
@@ -692,8 +714,8 @@ export default function InvoiceApp({
                   <thead>
                     <tr className="bg-gray-100">
                       <th className="text-left p-2 border border-gray-200 font-medium">Description</th>
-                      <th className="p-2 border border-gray-200 font-medium w-28 text-right">Earned (ex VAT) €</th>
-                      <th className="p-2 border border-gray-200 font-medium w-20 text-right">Share %</th>
+                      <th className="p-2 border border-gray-200 font-medium w-28 text-right">Wolt Gross (ex VAT) €</th>
+                      <th className="p-2 border border-gray-200 font-medium w-36 text-center">Worker Share</th>
                       <th className="p-2 border border-gray-200 font-medium w-24 text-right">Claimed (ex VAT) €</th>
                       <th className="p-2 border border-gray-200 font-medium w-16">VAT %</th>
                       <th className="p-2 border border-gray-200 font-medium w-20 text-right">VAT €</th>
@@ -704,6 +726,7 @@ export default function InvoiceApp({
                   <tbody>
                     {lineItems.map((item, idx) => {
                       const c = calculated.lineItems[idx]
+                      const isAmt = item.shareType === 'AMOUNT'
                       return (
                         <tr key={item.id} className="hover:bg-gray-50">
                           <td className="p-1 border border-gray-200">
@@ -726,23 +749,55 @@ export default function InvoiceApp({
                               placeholder="0.00"
                             />
                           </td>
+                          {/* Share column: toggle between % and € */}
                           <td className="p-1 border border-gray-200">
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={item.sharePercent}
-                              onChange={(e) => handleLineItemChange(item.id, 'sharePercent', e.target.value)}
-                              list="share-presets"
-                              className="w-full border-0 p-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400 rounded"
-                              placeholder="75"
-                            />
-                            <datalist id="share-presets">
-                              <option value="100" />
-                              <option value="80" />
-                              <option value="75" />
-                              <option value="50" />
-                              <option value="25" />
-                            </datalist>
+                            <div className="flex items-center gap-1">
+                              {/* Toggle button */}
+                              <button
+                                type="button"
+                                title={isAmt ? 'Switch to percentage share' : 'Switch to fixed amount share'}
+                                onClick={() => handleLineItemChange(item.id, 'shareType', isAmt ? 'PERCENT' : 'AMOUNT')}
+                                className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
+                                  isAmt
+                                    ? 'bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200'
+                                    : 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200'
+                                }`}
+                              >
+                                {isAmt ? '€' : '%'}
+                              </button>
+                              {isAmt ? (
+                                <input
+                                  type="number"
+                                  value={item.shareAmount}
+                                  onChange={(e) => handleLineItemChange(item.id, 'shareAmount', e.target.value)}
+                                  className="w-full border-0 p-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-orange-400 rounded"
+                                  step="0.01"
+                                  min="0"
+                                  placeholder="250.00"
+                                  title="Fixed euro amount the worker receives"
+                                />
+                              ) : (
+                                <>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={item.sharePercent}
+                                    onChange={(e) => handleLineItemChange(item.id, 'sharePercent', e.target.value)}
+                                    list="share-presets"
+                                    className="w-full border-0 p-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400 rounded"
+                                    placeholder="75"
+                                    title="Percentage of Wolt gross the worker receives"
+                                  />
+                                  <datalist id="share-presets">
+                                    <option value="100" />
+                                    <option value="80" />
+                                    <option value="75" />
+                                    <option value="50" />
+                                    <option value="25" />
+                                  </datalist>
+                                </>
+                              )}
+                            </div>
                           </td>
                           <td className="p-1 border border-gray-200 text-right text-gray-600 pr-2 font-mono">
                             {c ? c.amountExVat.toFixed(2) : '0.00'}
