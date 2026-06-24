@@ -379,14 +379,6 @@ export function InvoicePDF({ invoice }: { invoice: InvoiceWithItems }) {
               <Text style={s.paymentRefValue}>{invoice.reference.formattedReference}</Text>
             </View>
           ) : null}
-          {invoice.reference ? (
-            <Text style={s.paymentNote}>
-              Merkitse viitenumero maksun yhteyteen.{`\n`}
-              Include the reference number with your payment.
-            </Text>
-          ) : (
-            <Text style={s.paymentNote}>Ei viitenumeroa / No reference number</Text>
-          )}
         </View>
 
         {/* ── Notes ── */}

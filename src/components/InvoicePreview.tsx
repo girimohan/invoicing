@@ -231,16 +231,6 @@ export default function InvoicePreview({ form, lineItems, calculated }: Props) {
         {liveRef && (
           <PayRow label="Viitenumero / Reference:" value={liveRef.formattedReference} bold />
         )}
-        {liveRef ? (
-          <div style={{ fontSize: '7.5pt', color: '#555', marginTop: '6pt', fontStyle: 'italic' }}>
-            Merkitse viitenumero maksun yhteyteen.<br />
-            Include the reference number with your payment.
-          </div>
-        ) : (
-          <div style={{ fontSize: '7.5pt', color: '#888', marginTop: '6pt', fontStyle: 'italic' }}>
-            Ei viitenumeroa / No reference number
-          </div>
-        )}
       </div>
 
       {/* ── Notes ── */}
