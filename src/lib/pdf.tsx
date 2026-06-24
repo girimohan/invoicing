@@ -379,17 +379,9 @@ export function InvoicePDF({ invoice }: { invoice: InvoiceWithItems }) {
               <Text style={s.paymentRefValue}>{invoice.reference.formattedReference}</Text>
             </View>
           ) : null}
-          <View style={s.paymentRow}>
-            <Text style={s.paymentLabel}>Eräpäivä / Due date:</Text>
-            <Text style={s.paymentValue}>{formatDateFromDate(invoice.dueDate)}</Text>
-          </View>
-          <View style={s.paymentRow}>
-            <Text style={s.paymentLabel}>Maksettava / Amount due:</Text>
-            <Text style={s.paymentValue}>{invoice.totalIncVat.toFixed(2)} EUR</Text>
-          </View>
           {invoice.reference ? (
             <Text style={s.paymentNote}>
-              Merkitse viitenumero maksun yhteyteen.{'\n'}
+              Merkitse viitenumero maksun yhteyteen.{`\n`}
               Include the reference number with your payment.
             </Text>
           ) : (

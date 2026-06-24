@@ -231,8 +231,6 @@ export default function InvoicePreview({ form, lineItems, calculated }: Props) {
         {liveRef && (
           <PayRow label="Viitenumero / Reference:" value={liveRef.formattedReference} bold />
         )}
-        <PayRow label="Eräpäivä / Due date:" value={form.dueDate ? formatDate(form.dueDate) : '—'} />
-        <PayRow label="Maksettava / Amount due:" value={`${f(calculated.totalIncVat)} EUR`} />
         {liveRef ? (
           <div style={{ fontSize: '7.5pt', color: '#555', marginTop: '6pt', fontStyle: 'italic' }}>
             Merkitse viitenumero maksun yhteyteen.<br />
