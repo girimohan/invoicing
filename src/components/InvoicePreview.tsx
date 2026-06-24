@@ -1,8 +1,10 @@
 'use client'
 
+import { useMemo } from 'react'
 import type { FormState, LineItemRow, Calculated } from '@/types/invoice'
 import { formatDate, formatIban, formatCurrency } from '@/lib/calculations'
 import { numberToWords } from '@/lib/numberToWords'
+import { buildBaseNumber, generateReference, validateBaseNumber } from '@/lib/viitenumero'
 
 interface Props {
   form: FormState
@@ -12,6 +14,20 @@ interface Props {
 
 export default function InvoicePreview({ form, lineItems, calculated }: Props) {
   const f = (n: number) => formatCurrency(n)
+
+  // Compute live reference number from form fields (mirrors InvoiceApp logic)
+  const liveRef = useMemo(() => {
+    if (!form.includeReference) return null
+    const seq = form.refInvoiceSeq?.trim()
+    if (!seq) return null
+    const base = buildBaseNumber({
+      clientCode: form.refClientCode?.trim() || undefined,
+      yearMonth: form.refYearMonth?.trim() || undefined,
+      invoiceSeq: seq,
+    })
+    if (validateBaseNumber(base)) return null
+    return generateReference(form.referenceType ?? 'domestic', base)
+  }, [form.includeReference, form.referenceType, form.refClientCode, form.refYearMonth, form.refInvoiceSeq])
 
   return (
     // A4 paper simulation
@@ -207,11 +223,26 @@ export default function InvoicePreview({ form, lineItems, calculated }: Props) {
         }}
       >
         <div style={{ fontWeight: 'bold', fontSize: '8.5pt', borderBottom: '0.3pt solid #ddd', paddingBottom: '4pt', marginBottom: '5pt' }}>
-          Maksutiedot / Payment Details
+          MAKSUTIEDOT / PAYMENT DETAILS
         </div>
-        <PayRow label="Tilinumero:" value={formatIban(form.sellerIban) || '—'} />
-        <PayRow label="BIC/SWIFT:" value={form.sellerBic || '—'} />
-        <PayRow label="Saajan nimi:" value={form.sellerName || '—'} />
+        <PayRow label="Saajan nimi / Payee:" value={form.sellerName || '—'} />
+        <PayRow label="Tilinumero / IBAN:" value={formatIban(form.sellerIban) || '—'} />
+        <PayRow label="BIC / SWIFT:" value={form.sellerBic || '—'} />
+        {liveRef && (
+          <PayRow label="Viitenumero / Reference:" value={liveRef.formattedReference} bold />
+        )}
+        <PayRow label="Eräpäivä / Due date:" value={form.dueDate ? formatDate(form.dueDate) : '—'} />
+        <PayRow label="Maksettava / Amount due:" value={`${f(calculated.totalIncVat)} EUR`} />
+        {liveRef ? (
+          <div style={{ fontSize: '7.5pt', color: '#555', marginTop: '6pt', fontStyle: 'italic' }}>
+            Merkitse viitenumero maksun yhteyteen.<br />
+            Include the reference number with your payment.
+          </div>
+        ) : (
+          <div style={{ fontSize: '7.5pt', color: '#888', marginTop: '6pt', fontStyle: 'italic' }}>
+            Ei viitenumeroa / No reference number
+          </div>
+        )}
       </div>
 
       {/* ── Notes ── */}
@@ -335,11 +366,11 @@ function TotalRow({
   )
 }
 
-function PayRow({ label, value }: { label: string; value: string }) {
+function PayRow({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
   return (
     <div style={{ display: 'flex', gap: '8pt', marginBottom: '3pt' }}>
-      <span style={{ color: '#666', fontSize: '8pt', width: '64pt' }}>{label}</span>
-      <span style={{ fontWeight: 'bold' }}>{value}</span>
+      <span style={{ color: '#666', fontSize: '8pt', width: '120pt', flexShrink: 0 }}>{label}</span>
+      <span style={{ fontWeight: bold ? 'bold' : 'normal', fontSize: bold ? '10pt' : '9pt', letterSpacing: bold ? '0.5px' : undefined }}>{value}</span>
     </div>
   )
 }
