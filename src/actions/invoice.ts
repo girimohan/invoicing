@@ -3,8 +3,47 @@
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import type { InvoiceInput } from '@/types/invoice'
+import {
+  buildBaseNumber,
+  generateReference,
+  validateBaseNumber,
+} from '@/lib/viitenumero'
+
+async function buildReferenceData(data: InvoiceInput) {
+  if (!data.includeReference) return null
+
+  const refSeq = data.refInvoiceSeq?.trim()
+  if (!refSeq) throw new Error('Invoice sequence is required for reference number generation.')
+
+  const base = buildBaseNumber({
+    clientCode: data.refClientCode?.trim() || undefined,
+    yearMonth: data.refYearMonth?.trim() || undefined,
+    invoiceSeq: refSeq,
+  })
+
+  const validationError = validateBaseNumber(base)
+  if (validationError) throw new Error(validationError)
+
+  const refType = data.referenceType ?? 'domestic'
+  const result = generateReference(refType, base)
+
+  // Uniqueness check — reject if this formatted reference is already used
+  const existing = await db.invoiceReference.findUnique({
+    where: { formattedReference: result.formattedReference },
+  })
+  if (existing) {
+    throw new Error(
+      `Reference number "${result.formattedReference}" is already assigned to another invoice. ` +
+        'Please increment the invoice sequence or change the input values.'
+    )
+  }
+
+  return result
+}
 
 export async function saveInvoice(data: InvoiceInput): Promise<{ id: string }> {
+  const refData = await buildReferenceData(data)
+
   const invoice = await db.invoice.create({
     data: {
       invoiceNumber: data.invoiceNumber,
@@ -56,6 +95,19 @@ export async function saveInvoice(data: InvoiceInput): Promise<{ id: string }> {
           sortOrder: idx,
         })),
       },
+
+      ...(refData
+        ? {
+            reference: {
+              create: {
+                baseNumber: refData.baseNumber,
+                checkDigit: refData.checkDigit,
+                formattedReference: refData.formattedReference,
+                referenceType: refData.referenceType,
+              },
+            },
+          }
+        : {}),
     },
   })
 
@@ -70,6 +122,7 @@ export async function getInvoices() {
       lineItems: { orderBy: { sortOrder: 'asc' } },
       client: { select: { id: true, displayId: true, name: true } },
       buyerClient: { select: { id: true, displayId: true, name: true } },
+      reference: true,
     },
   })
 }
@@ -77,11 +130,27 @@ export async function getInvoices() {
 export async function getInvoice(id: string) {
   return db.invoice.findUnique({
     where: { id },
-    include: { lineItems: { orderBy: { sortOrder: 'asc' } } },
+    include: {
+      lineItems: { orderBy: { sortOrder: 'asc' } },
+      reference: true,
+    },
   })
 }
 
 export async function updateInvoice(id: string, data: InvoiceInput): Promise<{ id: string }> {
+  // Reference numbers are immutable once saved — never overwrite an existing one.
+  // Only create a new reference if the invoice doesn't already have one.
+  const existing = await db.invoice.findUnique({
+    where: { id },
+    select: { reference: { select: { id: true } } },
+  })
+  const hasExistingRef = !!existing?.reference
+
+  let newRefData = null
+  if (!hasExistingRef && data.includeReference) {
+    newRefData = await buildReferenceData(data)
+  }
+
   const invoice = await db.invoice.update({
     where: { id },
     data: {
@@ -135,6 +204,19 @@ export async function updateInvoice(id: string, data: InvoiceInput): Promise<{ i
           sortOrder: idx,
         })),
       },
+
+      ...(newRefData
+        ? {
+            reference: {
+              create: {
+                baseNumber: newRefData.baseNumber,
+                checkDigit: newRefData.checkDigit,
+                formattedReference: newRefData.formattedReference,
+                referenceType: newRefData.referenceType,
+              },
+            },
+          }
+        : {}),
     },
   })
 

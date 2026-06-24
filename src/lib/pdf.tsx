@@ -12,7 +12,7 @@ import { numberToWords } from './numberToWords'
 import { formatIban, formatDateFromDate } from './calculations'
 
 type InvoiceWithItems = Prisma.InvoiceGetPayload<{
-  include: { lineItems: true }
+  include: { lineItems: true; reference: true }
 }>
 
 const s = StyleSheet.create({
@@ -161,8 +161,19 @@ const s = StyleSheet.create({
     paddingBottom: 4,
   },
   paymentRow: { flexDirection: 'row', marginBottom: 3 },
-  paymentLabel: { width: 70, color: '#666666', fontSize: 8 },
+  paymentLabel: { width: 130, color: '#666666', fontSize: 8 },
   paymentValue: { fontFamily: 'Helvetica-Bold', fontSize: 9 },
+  paymentRefValue: {
+    fontFamily: 'Helvetica-Bold',
+    fontSize: 10,
+    letterSpacing: 0.5,
+  },
+  paymentNote: {
+    fontSize: 7.5,
+    color: '#555555',
+    marginTop: 6,
+    fontStyle: 'italic',
+  },
 
   // ─── Notes ────────────────────────────────────────────────────────────────
   notesBox: { marginTop: 12 },
@@ -348,20 +359,42 @@ export function InvoicePDF({ invoice }: { invoice: InvoiceWithItems }) {
         {/* ── Payment information box ── */}
         <View style={s.paymentBox}>
           <Text style={s.paymentBoxTitle}>
-            Maksutiedot / Payment Details
+            MAKSUTIEDOT / PAYMENT DETAILS
           </Text>
           <View style={s.paymentRow}>
-            <Text style={s.paymentLabel}>Tilinumero:</Text>
+            <Text style={s.paymentLabel}>Saajan nimi / Payee:</Text>
+            <Text style={s.paymentValue}>{invoice.sellerName}</Text>
+          </View>
+          <View style={s.paymentRow}>
+            <Text style={s.paymentLabel}>Tilinumero / IBAN:</Text>
             <Text style={s.paymentValue}>{formatIban(invoice.sellerIban)}</Text>
           </View>
           <View style={s.paymentRow}>
-            <Text style={s.paymentLabel}>BIC/SWIFT:</Text>
+            <Text style={s.paymentLabel}>BIC / SWIFT:</Text>
             <Text style={s.paymentValue}>{invoice.sellerBic}</Text>
           </View>
+          {invoice.reference ? (
+            <View style={s.paymentRow}>
+              <Text style={s.paymentLabel}>Viitenumero / Reference:</Text>
+              <Text style={s.paymentRefValue}>{invoice.reference.formattedReference}</Text>
+            </View>
+          ) : null}
           <View style={s.paymentRow}>
-            <Text style={s.paymentLabel}>Saajan nimi:</Text>
-            <Text style={s.paymentValue}>{invoice.sellerName}</Text>
+            <Text style={s.paymentLabel}>Eräpäivä / Due date:</Text>
+            <Text style={s.paymentValue}>{formatDateFromDate(invoice.dueDate)}</Text>
           </View>
+          <View style={s.paymentRow}>
+            <Text style={s.paymentLabel}>Maksettava / Amount due:</Text>
+            <Text style={s.paymentValue}>{invoice.totalIncVat.toFixed(2)} EUR</Text>
+          </View>
+          {invoice.reference ? (
+            <Text style={s.paymentNote}>
+              Merkitse viitenumero maksun yhteyteen.{'\n'}
+              Include the reference number with your payment.
+            </Text>
+          ) : (
+            <Text style={s.paymentNote}>Ei viitenumeroa / No reference number</Text>
+          )}
         </View>
 
         {/* ── Notes ── */}

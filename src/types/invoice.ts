@@ -50,6 +50,14 @@ export interface InvoiceInput {
   workerId?: number | null
   buyerClientId?: number | null
 
+  // Viitenumero / Reference number
+  includeReference?: boolean
+  referenceType?: 'domestic' | 'rf'
+  refClientCode?: string     // optional client code prefix (e.g. "106")
+  refYearMonth?: string      // optional year-month (e.g. "202606")
+  refInvoiceSeq?: string     // required when includeReference=true (e.g. "1")
+  formattedReference?: string
+
   lineItems: LineItemInput[]
 }
 
@@ -112,4 +120,11 @@ export interface FormState {
   buyerVatId: string
 
   notes: string
+
+  // Viitenumero / Reference number
+  includeReference: boolean
+  referenceType: 'domestic' | 'rf'
+  refClientCode: string
+  refYearMonth: string
+  refInvoiceSeq: string
 }

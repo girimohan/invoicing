@@ -4,6 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { saveInvoice, updateInvoice } from '@/actions/invoice'
 import { getClients, createClient, type ClientRole } from '@/actions/client'
 import { calculateInvoice } from '@/lib/calculations'
+import {
+  buildBaseNumber,
+  generateReference,
+  validateBaseNumber,
+  calcDomesticCheckDigitSteps,
+  type ReferenceResult,
+} from '@/lib/viitenumero'
 import InvoicePreview from './InvoicePreview'
 import type { FormState, LineItemRow, InvoiceInput } from '@/types/invoice'
 
@@ -119,6 +126,12 @@ function buildEditForm(inv: EditInvoice): FormState {
     buyerBusinessId: inv.buyerBusinessId,
     buyerVatId: inv.buyerVatId,
     notes: inv.notes ?? '',
+    // Reference fields — not editable when editing (immutable once saved)
+    includeReference: false,
+    referenceType: 'domestic',
+    refClientCode: '',
+    refYearMonth: new Date().toISOString().slice(0, 7).replace('-', ''),
+    refInvoiceSeq: '1',
   }
 }
 
@@ -150,6 +163,11 @@ function buildInitialForm(invoiceNumber: string): FormState {
     buyerBusinessId: '',
     buyerVatId: '',
     notes: '',
+    includeReference: false,
+    referenceType: 'domestic',
+    refClientCode: '',
+    refYearMonth: new Date().toISOString().slice(0, 7).replace('-', ''),
+    refInvoiceSeq: '1',
   }
 }
 
@@ -182,6 +200,38 @@ export default function InvoiceApp({
   const [error, setError] = useState<string | null>(null)
   const profileSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const ahProfileSavedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Viitenumero live calculation ──
+  const [showRefSteps, setShowRefSteps] = useState(false)
+  const [refCopied, setRefCopied] = useState(false)
+  const refCopyTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const liveRef = useMemo((): ReferenceResult | null => {
+    if (!form.includeReference) return null
+    const seq = form.refInvoiceSeq.trim()
+    if (!seq) return null
+    const base = buildBaseNumber({
+      clientCode: form.refClientCode.trim() || undefined,
+      yearMonth: form.refYearMonth.trim() || undefined,
+      invoiceSeq: seq,
+    })
+    if (validateBaseNumber(base)) return null
+    return generateReference(form.referenceType, base)
+  }, [form.includeReference, form.referenceType, form.refClientCode, form.refYearMonth, form.refInvoiceSeq])
+
+  const liveRefSteps = useMemo(() => {
+    if (!liveRef || liveRef.referenceType !== 'domestic') return null
+    return calcDomesticCheckDigitSteps(liveRef.baseNumber)
+  }, [liveRef])
+
+  const handleCopyRef = useCallback(() => {
+    if (!liveRef) return
+    navigator.clipboard.writeText(liveRef.formattedReference).then(() => {
+      setRefCopied(true)
+      if (refCopyTimer.current) clearTimeout(refCopyTimer.current)
+      refCopyTimer.current = setTimeout(() => setRefCopied(false), 2000)
+    }).catch(() => {})
+  }, [liveRef])
 
   // ── All clients split by role ──
   const [allClients, setAllClients] = useState<ClientOption[]>([])
@@ -227,7 +277,7 @@ export default function InvoiceApp({
 
   // ── Handlers ──
   const handleChange = useCallback(
-    (field: keyof FormState, value: string) => {
+    (field: keyof FormState, value: string | boolean) => {
       setForm((prev) => ({ ...prev, [field]: value }))
     },
     []
@@ -321,8 +371,7 @@ export default function InvoiceApp({
     }
   }, [form, allClients])
 
-  // ── Select a substitute worker → fill seller fields ──
-  // ── Select a substitute worker → fill seller fields + generate invoice number ──
+  // ── Select a substitute worker → fill seller fields + generate invoice number + pre-fill reference ──
   const selectWorker = useCallback((clientId: number | null) => {
     setSelectedWorkerId(clientId)
     if (clientId === null) return
@@ -342,13 +391,18 @@ export default function InvoiceApp({
       sellerEmail: c.email ?? '',
       sellerPhone: c.phone ?? '',
       invoiceNumber: `BB-${c.displayId}-${yyyymm}-${invoiceSeq}`,
+      // Auto-fill reference fields from the worker's client ID and current period
+      refClientCode: c.displayId,
+      refYearMonth: yyyymm,
+      refInvoiceSeq: invoiceSeq,
     }))
   }, [workers, invoiceSeq])
 
-  // ── Select an account holder → fill buyer fields only ──
+  // ── Select an account holder → fill buyer fields only + sync refInvoiceSeq ──
   const selectHolder = useCallback((clientId: number | null, seq: '1' | '2') => {
     setSelectedHolderId(clientId)
     setInvoiceSeq(seq)
+    setForm((prev) => ({ ...prev, refInvoiceSeq: seq }))
     if (clientId === null) return
     const c = holders.find((h) => h.id === clientId)
     if (!c) return
@@ -422,6 +476,26 @@ export default function InvoiceApp({
       }
     }
 
+    // Validate reference number inputs if enabled
+    if (form.includeReference) {
+      if (!form.refInvoiceSeq.trim() || !/^\d+$/.test(form.refInvoiceSeq.trim())) {
+        setError('Reference: Invoice sequence must be a positive integer.')
+        return
+      }
+      if (form.refClientCode.trim() && !/^\d+$/.test(form.refClientCode.trim())) {
+        setError('Reference: Client code must contain digits only.')
+        return
+      }
+      if (form.refYearMonth.trim() && !/^\d+$/.test(form.refYearMonth.trim())) {
+        setError('Reference: Year-month must contain digits only.')
+        return
+      }
+      if (!liveRef) {
+        setError('Reference number could not be calculated. Check the reference inputs.')
+        return
+      }
+    }
+
     setSubmitting(true)
     try {
       const invoiceData: InvoiceInput = {
@@ -431,6 +505,7 @@ export default function InvoiceApp({
         totalIncVat: calculated.totalIncVat,
         workerId: selectedWorkerId ?? null,
         buyerClientId: selectedHolderId ?? null,
+        formattedReference: liveRef?.formattedReference,
         lineItems: filledItems.map((item) => {
           const idx = lineItems.indexOf(item)
           return {
@@ -478,7 +553,7 @@ export default function InvoiceApp({
   ) => (
     <input
       type={opts?.type ?? 'text'}
-      value={form[field]}
+      value={form[field] as string}
       onChange={(e) => handleChange(field, e.target.value)}
       required={opts?.required}
       placeholder={opts?.placeholder}
@@ -608,6 +683,7 @@ export default function InvoiceApp({
                         if (c) setForm((prev) => ({
                           ...prev,
                           invoiceNumber: `BB-${c.displayId}-${new Date().toISOString().slice(0, 7).replace('-', '')}-${seq}`,
+                          refInvoiceSeq: seq,
                         }))
                       } else {
                         const ids = allClients.map((c) => parseInt(c.displayId, 10) || 100)
@@ -616,6 +692,7 @@ export default function InvoiceApp({
                         setForm((prev) => ({
                           ...prev,
                           invoiceNumber: `BB-${nextId}-${yyyymm}-${seq}`,
+                          refInvoiceSeq: seq,
                         }))
                       }
                     }}
@@ -897,6 +974,187 @@ export default function InvoiceApp({
                   placeholder="Any additional notes or terms…"
                 />
               </div>
+            </div>
+
+            {/* ── Viitenumero / Reference Number ── */}
+            <div className="form-section">
+              <div className="form-section-title">Viitenumero / Reference Number</div>
+
+              {/* Toggle */}
+              <label className="flex items-center gap-2 cursor-pointer mb-4 select-none">
+                <input
+                  type="checkbox"
+                  checked={form.includeReference}
+                  onChange={(e) => handleChange('includeReference', e.target.checked)}
+                  className="w-4 h-4 accent-blue-600"
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  Sisällytä viitenumero / Include reference number
+                </span>
+              </label>
+
+              {!form.includeReference && (
+                <p className="text-xs text-gray-500 italic">
+                  Ei viitenumeroa / No reference number — the payment block will indicate no reference.
+                </p>
+              )}
+
+              {form.includeReference && (
+                <div className="space-y-4">
+                  {/* Reference type selector */}
+                  <div>
+                    <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Reference format</p>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+                        <input
+                          type="radio"
+                          name="referenceType"
+                          value="domestic"
+                          checked={form.referenceType === 'domestic'}
+                          onChange={() => handleChange('referenceType', 'domestic')}
+                          className="accent-blue-600"
+                        />
+                        <span className="font-medium">Kansallinen viitenumero</span>
+                        <span className="text-gray-400">(domestic Finnish — default)</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+                        <input
+                          type="radio"
+                          name="referenceType"
+                          value="rf"
+                          checked={form.referenceType === 'rf'}
+                          onChange={() => handleChange('referenceType', 'rf')}
+                          className="accent-blue-600"
+                        />
+                        <span className="font-medium">RF-viitenumero</span>
+                        <span className="text-gray-400">(SEPA ISO 11649)</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* Input fields */}
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="field">
+                      <label>
+                        Asiakasnumero / Client code
+                        <span className="text-gray-400 font-normal ml-1">(optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={form.refClientCode}
+                        onChange={(e) => handleChange('refClientCode', e.target.value)}
+                        placeholder="e.g. 106"
+                        className="border border-gray-300 rounded px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                      />
+                    </div>
+                    <div className="field">
+                      <label>
+                        Vuosi-kuukausi / Year-month
+                        <span className="text-gray-400 font-normal ml-1">(optional)</span>
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={form.refYearMonth}
+                        onChange={(e) => handleChange('refYearMonth', e.target.value)}
+                        placeholder="e.g. 202606"
+                        className="border border-gray-300 rounded px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                      />
+                    </div>
+                    <div className="field">
+                      <label>
+                        Laskujuokseva / Invoice sequence <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        value={form.refInvoiceSeq}
+                        onChange={(e) => handleChange('refInvoiceSeq', e.target.value)}
+                        placeholder="1"
+                        min="1"
+                        step="1"
+                        className="border border-gray-300 rounded px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Base number preview */}
+                  {liveRef && (
+                    <div className="text-xs text-gray-500 -mt-1">
+                      Pohjaluku / Base number:{' '}
+                      <span className="font-mono text-gray-700">{liveRef.baseNumber}</span>
+                    </div>
+                  )}
+
+                  {/* Live reference number display */}
+                  {liveRef ? (
+                    <div className="bg-blue-50 border border-blue-300 rounded p-3">
+                      <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-wide mb-1">
+                        Viitenumero / Reference number
+                      </p>
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono font-bold text-lg text-blue-900 tracking-widest">
+                          {liveRef.formattedReference}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleCopyRef}
+                          className="text-xs border border-blue-300 text-blue-700 px-2 py-0.5 rounded hover:bg-blue-100 transition-colors"
+                        >
+                          {refCopied ? 'Copied ✓' : 'Copy reference'}
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-blue-500 mt-1">
+                        Type: {liveRef.referenceType === 'rf' ? 'RF (ISO 11649)' : 'Kansallinen (Modulo 10)'}
+                        {' · '}Check digit: <span className="font-mono">{liveRef.checkDigit}</span>
+                      </p>
+
+                      {/* Collapsible check digit steps (domestic only) */}
+                      {liveRef.referenceType === 'domestic' && liveRefSteps && (
+                        <div className="mt-2">
+                          <button
+                            type="button"
+                            onClick={() => setShowRefSteps((v) => !v)}
+                            className="text-[10px] text-blue-500 hover:underline"
+                          >
+                            {showRefSteps ? '▾ Hide calculation steps' : '▸ Show calculation steps'}
+                          </button>
+                          {showRefSteps && (
+                            <div className="mt-2 text-[10px] font-mono bg-white border border-blue-200 rounded p-2 overflow-x-auto">
+                              <table className="border-collapse text-center">
+                                <thead>
+                                  <tr className="text-blue-600">
+                                    <th className="px-2 pb-1">Digit</th>
+                                    <th className="px-2 pb-1">Weight</th>
+                                    <th className="px-2 pb-1">Product</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {liveRefSteps.digits.map((d, i) => (
+                                    <tr key={i} className={i % 2 === 0 ? 'bg-blue-50' : ''}>
+                                      <td className="px-2">{d}</td>
+                                      <td className="px-2">{liveRefSteps.weights[i]}</td>
+                                      <td className="px-2">{liveRefSteps.products[i]}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                              <p className="mt-1 text-gray-600">
+                                Sum = {liveRefSteps.sum} · Next × 10 = {liveRefSteps.nextMultipleOf10} · Check = {liveRefSteps.checkDigit}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-amber-600">
+                      Enter a valid invoice sequence to calculate the reference number.
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* ── VAT Filing Data ── */}

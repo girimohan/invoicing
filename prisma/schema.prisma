@@ -56,9 +56,22 @@ model Invoice {
   notes           String?
 
   lineItems       LineItem[]
+  reference       InvoiceReference?
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+}
+
+// ── Invoice Reference Number (Viitenumero) ───────────────────────────────────
+model InvoiceReference {
+  id                 String   @id @default(cuid())
+  invoiceId          String   @unique
+  invoice            Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  baseNumber         String
+  checkDigit         String
+  formattedReference String   @unique
+  referenceType      String   // 'domestic' | 'rf'
+  generatedAt        DateTime @default(now())
 }
 
 model Client {
