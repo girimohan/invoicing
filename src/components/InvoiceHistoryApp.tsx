@@ -60,6 +60,7 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
   const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear())
   const [viewMode, setViewMode] = useState<'worker' | 'owner'>('worker')
   const [expandedWorker, setExpandedWorker] = useState<string | null>(null)
+  const [expandedOwner, setExpandedOwner] = useState<string | null>(null)
   const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
@@ -92,25 +93,6 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
   }
   const workers = Array.from(workerMap.values()).sort((a, b) => a.name.localeCompare(b.name))
 
-  // ── VAT summary for selected year ─────────────────────────────────────────
-  const vatMap = new Map<number, { base: number; vat: number }>()
-  for (const inv of yearInvoices) {
-    for (const item of inv.lineItems) {
-      const e = vatMap.get(item.vatRate) ?? { base: 0, vat: 0 }
-      vatMap.set(item.vatRate, {
-        base: round2(e.base + item.amountExVat),
-        vat: round2(e.vat + item.vatAmount),
-      })
-    }
-  }
-  const vatBreakdown = Array.from(vatMap.entries())
-    .map(([rate, { base, vat }]) => ({ rate, base, vat }))
-    .sort((a, b) => b.rate - a.rate)
-
-  const grandTotalExVat = round2(yearInvoices.reduce((s, inv) => s + inv.totalExVat, 0))
-  const grandTotalVat = round2(yearInvoices.reduce((s, inv) => s + inv.totalVat, 0))
-  const grandTotal = round2(yearInvoices.reduce((s, inv) => s + inv.totalIncVat, 0))
-
   // ── Per worker totals ─────────────────────────────────────────────────────
   function workerTotals(invs: Invoice[]) {
     const grossTotal = round2(invs.reduce((s, i) => s + i.lineItems.reduce((ls, li) => ls + li.earnedAmount * (li.sharePercent / 100), 0), 0))
@@ -127,22 +109,6 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
       await deleteInvoice(inv.id)
       setInvoices((prev) => prev.filter((i) => i.id !== inv.id))
     })
-  }
-
-  // ── Quarterly VAT breakdown ───────────────────────────────────────────────
-  const quarters = [1, 2, 3, 4]
-  function quarterInvoices(q: number) {
-    return yearInvoices.filter((inv) => {
-      const m = new Date(inv.invoiceDate).getMonth() // 0-indexed
-      return Math.floor(m / 3) + 1 === q
-    })
-  }
-  function quarterVat(q: number) {
-    const qInvs = quarterInvoices(q)
-    const base = round2(qInvs.reduce((s, inv) => s + inv.totalExVat, 0))
-    const vat = round2(qInvs.reduce((s, inv) => s + inv.totalVat, 0))
-    const total = round2(qInvs.reduce((s, inv) => s + inv.totalIncVat, 0))
-    return { base, vat, total, count: qInvs.length }
   }
 
   return (
@@ -200,82 +166,7 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
         </div>
       ) : viewMode === 'worker' ? (
         <>
-          {/* ══ Section 1: VAT Filing Summary ══════════════════════════════════ */}
-          <div className="mb-6">
-            <h2 className="text-xs font-bold uppercase tracking-widest text-amber-700 mb-3">
-              VAT Filing Summary — {selectedYear}
-            </h2>
-            <div className="grid grid-cols-2 gap-4 mb-4 lg:grid-cols-4">
-              {/* Annual totals */}
-              <div className="bg-amber-50 border border-amber-200 rounded p-3">
-                <div className="text-[10px] text-amber-700 font-semibold uppercase tracking-wide mb-2">Annual Totals</div>
-                <div className="space-y-1 text-xs">
-                  <div className="flex justify-between"><span className="text-gray-500">Turnover excl. VAT:</span><span className="font-bold">{fmt(grandTotalExVat)} €</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Total VAT collected:</span><span className="font-bold text-amber-700">{fmt(grandTotalVat)} €</span></div>
-                  <div className="flex justify-between border-t border-amber-200 pt-1"><span className="text-gray-500">Total incl. VAT:</span><span className="font-bold">{fmt(grandTotal)} €</span></div>
-                  <div className="flex justify-between text-gray-400"><span>Invoice count:</span><span>{yearInvoices.length}</span></div>
-                </div>
-              </div>
-              {/* Per VAT rate */}
-              {vatBreakdown.map((vb) => (
-                <div key={vb.rate} className="bg-white border border-gray-200 rounded p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">
-                    {vb.rate === 0 ? 'Zero-rated (0% VAT)' : `VAT ${fmt(vb.rate)}% Rate`}
-                  </div>
-                  <div className="space-y-1 text-xs">
-                    <div className="flex justify-between"><span className="text-gray-500">Tax base (veroton):</span><span className="font-bold">{fmt(vb.base)} €</span></div>
-                    {vb.rate > 0 && (
-                      <div className="flex justify-between"><span className="text-gray-500">VAT to remit:</span><span className="font-bold text-blue-700">{fmt(vb.vat)} €</span></div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Quarterly breakdown */}
-            <div className="bg-white border border-gray-200 rounded overflow-hidden">
-              <div className="bg-gray-50 border-b border-gray-200 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-500">
-                Quarterly Breakdown (for VAT period filing)
-              </div>
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-gray-100 text-[10px] text-gray-400">
-                    <th className="text-left px-3 py-2 font-medium">Quarter</th>
-                    <th className="text-right px-3 py-2 font-medium">Invoices</th>
-                    <th className="text-right px-3 py-2 font-medium">Excl. VAT</th>
-                    <th className="text-right px-3 py-2 font-medium">VAT collected</th>
-                    <th className="text-right px-3 py-2 font-medium">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {quarters.map((q) => {
-                    const { base, vat, total, count } = quarterVat(q)
-                    const months = ['Jan–Mar', 'Apr–Jun', 'Jul–Sep', 'Oct–Dec'][q - 1]
-                    return (
-                      <tr key={q} className={`border-b border-gray-50 ${count === 0 ? 'text-gray-300' : ''}`}>
-                        <td className="px-3 py-2 font-medium">Q{q} <span className="text-gray-400 font-normal">({months})</span></td>
-                        <td className="px-3 py-2 text-right">{count}</td>
-                        <td className="px-3 py-2 text-right font-mono">{count > 0 ? `${fmt(base)} €` : '—'}</td>
-                        <td className="px-3 py-2 text-right font-mono text-amber-700">{count > 0 ? `${fmt(vat)} €` : '—'}</td>
-                        <td className="px-3 py-2 text-right font-mono font-semibold">{count > 0 ? `${fmt(total)} €` : '—'}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold">
-                    <td className="px-3 py-2">Annual Total</td>
-                    <td className="px-3 py-2 text-right">{yearInvoices.length}</td>
-                    <td className="px-3 py-2 text-right font-mono">{fmt(grandTotalExVat)} €</td>
-                    <td className="px-3 py-2 text-right font-mono text-amber-700">{fmt(grandTotalVat)} €</td>
-                    <td className="px-3 py-2 text-right font-mono">{fmt(grandTotal)} €</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          </div>
-
-          {/* ══ Section 2: Per-Worker Breakdown ════════════════════════════════ */}
+          {/* ══ Per-Worker Breakdown ═══════════════════════════════════════════ */}
           <div>
             <h2 className="text-xs font-bold uppercase tracking-widest text-purple-700 mb-3">
               Per Substitute Worker — {selectedYear}
@@ -323,9 +214,105 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                       </div>
                     </button>
 
-                    {/* Expanded: invoices table */}
+                    {/* Expanded: VAT summary + invoices table */}
                     {isOpen && (
                       <div className="border-t border-gray-100">
+                        {/* Per-worker VAT Filing Summary */}
+                        {(() => {
+                          const wVatMap = new Map<number, { base: number; vat: number }>()
+                          for (const inv of worker.invoices) {
+                            for (const item of inv.lineItems) {
+                              const e = wVatMap.get(item.vatRate) ?? { base: 0, vat: 0 }
+                              wVatMap.set(item.vatRate, {
+                                base: round2(e.base + item.amountExVat),
+                                vat: round2(e.vat + item.vatAmount),
+                              })
+                            }
+                          }
+                          const wVatBreakdown = Array.from(wVatMap.entries())
+                            .map(([rate, { base, vat }]) => ({ rate, base, vat }))
+                            .sort((a, b) => b.rate - a.rate)
+                          const wQuarters = [1, 2, 3, 4].map(q => {
+                            const qInvs = worker.invoices.filter(inv => Math.floor(new Date(inv.invoiceDate).getMonth() / 3) + 1 === q)
+                            return {
+                              q,
+                              base: round2(qInvs.reduce((s, inv) => s + inv.totalExVat, 0)),
+                              vat: round2(qInvs.reduce((s, inv) => s + inv.totalVat, 0)),
+                              total: round2(qInvs.reduce((s, inv) => s + inv.totalIncVat, 0)),
+                              count: qInvs.length,
+                            }
+                          })
+                          return (
+                            <div className="px-4 py-4 border-b border-gray-200 bg-amber-50/30">
+                              <div className="text-[10px] font-bold uppercase tracking-widest text-amber-700 mb-3">
+                                VAT Filing Summary — {selectedYear}
+                              </div>
+                              <div className="grid grid-cols-2 gap-3 mb-3 lg:grid-cols-4">
+                                <div className="bg-white border border-amber-200 rounded p-3">
+                                  <div className="text-[10px] text-amber-700 font-semibold uppercase tracking-wide mb-2">Annual Totals</div>
+                                  <div className="space-y-1 text-xs">
+                                    <div className="flex justify-between"><span className="text-gray-500">Excl. VAT:</span><span className="font-bold">{fmt(totals.exVat)} €</span></div>
+                                    <div className="flex justify-between"><span className="text-gray-500">VAT collected:</span><span className="font-bold text-amber-700">{fmt(totals.vat)} €</span></div>
+                                    <div className="flex justify-between border-t border-amber-200 pt-1"><span className="text-gray-500">Incl. VAT:</span><span className="font-bold">{fmt(totals.total)} €</span></div>
+                                    <div className="flex justify-between text-gray-400"><span>Invoices:</span><span>{worker.invoices.length}</span></div>
+                                  </div>
+                                </div>
+                                {wVatBreakdown.map((vb) => (
+                                  <div key={vb.rate} className="bg-white border border-gray-200 rounded p-3">
+                                    <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                                      {vb.rate === 0 ? 'Zero-rated (0% VAT)' : `VAT ${fmt(vb.rate)}% Rate`}
+                                    </div>
+                                    <div className="space-y-1 text-xs">
+                                      <div className="flex justify-between"><span className="text-gray-500">Tax base (veroton):</span><span className="font-bold">{fmt(vb.base)} €</span></div>
+                                      {vb.rate > 0 && (
+                                        <div className="flex justify-between"><span className="text-gray-500">VAT to remit:</span><span className="font-bold text-blue-700">{fmt(vb.vat)} €</span></div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              <div className="bg-white border border-gray-200 rounded overflow-hidden">
+                                <div className="bg-gray-50 border-b border-gray-200 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                                  Quarterly Breakdown
+                                </div>
+                                <table className="w-full text-xs">
+                                  <thead>
+                                    <tr className="border-b border-gray-100 text-[10px] text-gray-400">
+                                      <th className="text-left px-3 py-2 font-medium">Quarter</th>
+                                      <th className="text-right px-3 py-2 font-medium">Invoices</th>
+                                      <th className="text-right px-3 py-2 font-medium">Excl. VAT</th>
+                                      <th className="text-right px-3 py-2 font-medium">VAT collected</th>
+                                      <th className="text-right px-3 py-2 font-medium">Total</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {wQuarters.map(({ q, base, vat, total, count }) => {
+                                      const months = ['Jan–Mar', 'Apr–Jun', 'Jul–Sep', 'Oct–Dec'][q - 1]
+                                      return (
+                                        <tr key={q} className={`border-b border-gray-50 ${count === 0 ? 'text-gray-300' : ''}`}>
+                                          <td className="px-3 py-2 font-medium">Q{q} <span className="text-gray-400 font-normal">({months})</span></td>
+                                          <td className="px-3 py-2 text-right">{count}</td>
+                                          <td className="px-3 py-2 text-right font-mono">{count > 0 ? `${fmt(base)} €` : '—'}</td>
+                                          <td className="px-3 py-2 text-right font-mono text-amber-700">{count > 0 ? `${fmt(vat)} €` : '—'}</td>
+                                          <td className="px-3 py-2 text-right font-mono font-semibold">{count > 0 ? `${fmt(total)} €` : '—'}</td>
+                                        </tr>
+                                      )
+                                    })}
+                                  </tbody>
+                                  <tfoot>
+                                    <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold">
+                                      <td className="px-3 py-2">Annual Total</td>
+                                      <td className="px-3 py-2 text-right">{worker.invoices.length}</td>
+                                      <td className="px-3 py-2 text-right font-mono">{fmt(totals.exVat)} €</td>
+                                      <td className="px-3 py-2 text-right font-mono text-amber-700">{fmt(totals.vat)} €</td>
+                                      <td className="px-3 py-2 text-right font-mono">{fmt(totals.total)} €</td>
+                                    </tr>
+                                  </tfoot>
+                                </table>
+                              </div>
+                            </div>
+                          )
+                        })()}
                         <table className="w-full text-xs">
                           <thead>
                             <tr className="bg-gray-50 border-b border-gray-200 text-[10px] text-gray-400 uppercase tracking-wide">
@@ -513,28 +500,48 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                   }
                 })
 
-                return (
-                  <div key={owner.key} className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                const isOwnerOpen = expandedOwner === owner.key
 
-                    {/* ── Header ─────────────────────────────────────────────── */}
-                    <div className="flex items-center justify-between px-5 py-3 bg-indigo-700 text-white">
+                return (
+                  <div key={owner.key} className="bg-white border border-gray-200 rounded overflow-hidden">
+
+                    {/* ── Header — click to expand ────────────────────────────── */}
+                    <button
+                      type="button"
+                      onClick={() => setExpandedOwner(isOwnerOpen ? null : owner.key)}
+                      className="w-full flex items-center justify-between px-4 py-3 bg-indigo-700 hover:bg-indigo-800 transition-colors text-left"
+                    >
                       <div className="flex items-center gap-2">
                         {owner.displayId && (
                           <span className="bg-white/20 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">{owner.displayId}</span>
                         )}
-                        <span className="font-bold text-base">{owner.name}</span>
+                        <span className="font-bold text-white">{owner.name}</span>
                         <span className="text-indigo-200 text-[10px]">
                           {owner.invoices.length} worker invoice{owner.invoices.length !== 1 ? 's' : ''} — {selectedYear}
                         </span>
                       </div>
-                      {owner.clientId && (
-                        <a href={`/books?client=${owner.clientId}`}
-                          className="bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded font-semibold transition-colors">
-                          Open Client Books →
-                        </a>
-                      )}
-                    </div>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right hidden sm:block">
+                          <div className="text-[10px] text-indigo-200">Net income ex-VAT</div>
+                          <div className="text-xs font-mono font-semibold text-white">{fmt(holderNetIncome)} €</div>
+                        </div>
+                        <div className="text-right hidden sm:block">
+                          <div className="text-[10px] text-indigo-200">Net VAT</div>
+                          <div className={`text-xs font-mono font-semibold ${netVatToRemit >= 0 ? 'text-red-300' : 'text-green-300'}`}>{fmt(netVatToRemit)} €</div>
+                        </div>
+                        {owner.clientId && (
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <a href={`/books?client=${owner.clientId}`}
+                              className="bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded font-semibold transition-colors">
+                              Open Client Books →
+                            </a>
+                          </div>
+                        )}
+                        <span className="text-indigo-200 text-xs">{isOwnerOpen ? '▲' : '▼'}</span>
+                      </div>
+                    </button>
 
+                    {isOwnerOpen && (
                     <div className="p-5 space-y-5">
 
                       {/* ── Financial summary + VAT filing side by side ───────── */}
@@ -694,6 +701,7 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                       </div>
 
                     </div>
+                    )}
                   </div>
                 )
               })}
