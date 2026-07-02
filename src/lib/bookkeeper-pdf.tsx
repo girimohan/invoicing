@@ -254,8 +254,8 @@ export function BookkeeperInvoicePDF({ invoice }: { invoice: BookkeeperInvoice }
             <Text style={s.paymentValue}>{invoice.bkBic}</Text>
           </View>
           <View style={s.paymentRow}>
-            <Text style={s.paymentLabel}>Viite / Ref:</Text>
-            <Text style={s.paymentValue}>{invoice.invoiceNumber}</Text>
+            <Text style={s.paymentLabel}>Viesti / Message:</Text>
+            <Text style={s.paymentValue}>Bookkeeping invoice</Text>
           </View>
           <View style={s.paymentRow}>
             <Text style={s.paymentLabel}>Eräpäivä:</Text>

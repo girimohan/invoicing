@@ -124,10 +124,12 @@ export default function BookkeeperInvoiceApp({
   }
 
   // When client is selected from dropdown
-  function selectClient(id: number | null) {
+  async function selectClient(id: number | null) {
     setSelectedClientId(id)
     if (id === null) {
       setClient({ name: '', businessId: '', vatId: '', address: '', postalCode: '', city: '', email: '' })
+      const next = await getNextBkInvoiceNumber()
+      setInvoiceNumber(next)
       return
     }
     const c = clients.find((x) => x.id === id)
@@ -141,6 +143,8 @@ export default function BookkeeperInvoiceApp({
         city: c.city ?? '',
         email: c.email ?? '',
       })
+      const next = await getNextBkInvoiceNumber(c.displayId)
+      setInvoiceNumber(next)
     }
   }
 
@@ -265,13 +269,16 @@ export default function BookkeeperInvoiceApp({
           {error && (
             <div className="mx-6 mt-3 text-xs text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded">{error}</div>
           )}
-          {successMsg && savedId && (
-            <div className="mx-6 mt-3 text-xs text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded flex items-center justify-between">
-              <span>{successMsg}</span>
+          {successMsg && (
+            <div className="mx-6 mt-3 text-xs text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded">{successMsg}</div>
+          )}
+          {savedId && (
+            <div className="mx-6 mt-3 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-2 rounded flex items-center justify-between">
+              <span>Last saved invoice ready</span>
               <a
                 href={`/api/bookkeeper-invoice/${savedId}/pdf`}
                 target="_blank"
-                className="ml-3 bg-green-700 text-white px-3 py-1 rounded text-xs font-semibold hover:bg-green-800"
+                className="ml-3 bg-indigo-700 text-white px-3 py-1 rounded text-xs font-semibold hover:bg-indigo-800"
               >
                 Download PDF
               </a>
@@ -579,8 +586,8 @@ export default function BookkeeperInvoiceApp({
               <span className="font-bold">{bk.iban ? formatIbanDisplay(bk.iban) : <span className="text-gray-300">—</span>}</span>
               <span className="text-gray-400">BIC/SWIFT:</span>
               <span className="font-bold">{bk.bic || <span className="text-gray-300">—</span>}</span>
-              <span className="text-gray-400">Viite / Ref:</span>
-              <span className="font-bold">{invoiceNumber}</span>
+              <span className="text-gray-400">Viesti / Message:</span>
+              <span className="font-bold">Bookkeeping invoice</span>
               <span className="text-gray-400">Eräpäivä:</span>
               <span className="font-bold">{fmtDate(dueDate)}</span>
               <span className="text-gray-400">Summa:</span>

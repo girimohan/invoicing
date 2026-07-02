@@ -85,14 +85,15 @@ export async function getBookkeeperInvoice(id: string) {
   return db.bookkeeperInvoice.findUnique({ where: { id } })
 }
 
-export async function getNextBkInvoiceNumber(): Promise<string> {
+export async function getNextBkInvoiceNumber(clientDisplayId?: string): Promise<string> {
   const yyyymm = new Date().toISOString().slice(0, 7).replace('-', '')
-  const prefix = `BK-${yyyymm}-`
+  const clientPart = clientDisplayId || 'MANUAL'
+  const prefix = `BK-${yyyymm}-${clientPart}-`
   const last = await db.bookkeeperInvoice.findFirst({
     where: { invoiceNumber: { startsWith: prefix } },
     orderBy: { invoiceNumber: 'desc' },
   })
   if (!last) return `${prefix}1`
-  const seq = parseInt(last.invoiceNumber.split('-').pop() ?? '0', 10)
-  return `${prefix}${seq + 1}`
+  const seq = parseInt(last.invoiceNumber.replace(prefix, ''), 10)
+  return `${prefix}${isNaN(seq) ? 1 : seq + 1}`
 }
