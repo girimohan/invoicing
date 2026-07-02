@@ -4,6 +4,8 @@ import { useState, useEffect, useTransition } from 'react'
 import { getClients } from '@/actions/client'
 import {
   createBookkeeperInvoice,
+  updateBookkeeperInvoice,
+  deleteBookkeeperInvoice,
   getNextBkInvoiceNumber,
   getBookkeeperInvoices,
   type BookkeeperInvoiceInput,
@@ -96,6 +98,7 @@ export default function BookkeeperInvoiceApp({
 
   const [history, setHistory] = useState<BookkeeperInvoice[]>([])
   const [savedId, setSavedId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [submitting, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
@@ -215,20 +218,82 @@ export default function BookkeeperInvoiceApp({
 
     startTransition(async () => {
       try {
-        const result = await createBookkeeperInvoice(payload)
-        setSavedId(result.id)
-        setSuccessMsg(`Invoice ${invoiceNumber} saved!`)
-        // Refresh invoice number for next invoice
-        const next = await getNextBkInvoiceNumber()
-        setInvoiceNumber(next)
-        setNotes('')
-        setSelectedClientId(null)
-        setClient({ name: '', businessId: '', vatId: '', address: '', postalCode: '', city: '', email: '' })
+        if (editingId) {
+          // ── UPDATE existing invoice ──
+          await updateBookkeeperInvoice(editingId, payload)
+          setSuccessMsg(`Invoice ${invoiceNumber} updated!`)
+          setSavedId(editingId)
+          setEditingId(null)
+        } else {
+          // ── CREATE new invoice ──
+          const result = await createBookkeeperInvoice(payload)
+          setSavedId(result.id)
+          setSuccessMsg(`Invoice ${invoiceNumber} saved!`)
+          // Refresh invoice number for next invoice
+          const next = await getNextBkInvoiceNumber()
+          setInvoiceNumber(next)
+          setNotes('')
+          setSelectedClientId(null)
+          setClient({ name: '', businessId: '', vatId: '', address: '', postalCode: '', city: '', email: '' })
+        }
         // Refresh history
         getBookkeeperInvoices().then((list) => setHistory(list as BookkeeperInvoice[])).catch(() => {})
         setTimeout(() => setSuccessMsg(null), 5000)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to save invoice.')
+      }
+    })
+  }
+
+  // Load an existing invoice into the form for editing
+  function handleEditInvoice(inv: BookkeeperInvoice) {
+    setEditingId(inv.id)
+    setSavedId(null)
+    setError(null)
+    setSuccessMsg(null)
+    setInvoiceNumber(inv.invoiceNumber)
+    setIssueDate(new Date(inv.issueDate).toISOString().split('T')[0])
+    setDueDate(new Date(inv.dueDate).toISOString().split('T')[0])
+    setPaymentTerms(inv.paymentTerms)
+    setServiceDescription(inv.serviceDescription)
+    setAmountExVat(String(inv.amountExVat))
+    setVatRate(String(inv.vatRate))
+    setNotes(inv.notes ?? '')
+    setSelectedClientId(inv.clientId ?? null)
+    setClient({
+      name: inv.clientName,
+      businessId: inv.clientBusinessId ?? '',
+      vatId: inv.clientVatId ?? '',
+      address: inv.clientAddress ?? '',
+      postalCode: inv.clientPostalCode ?? '',
+      city: inv.clientCity ?? '',
+      email: inv.clientEmail ?? '',
+    })
+    // Scroll form into view
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  // Cancel edit — reset form to new-invoice state
+  function handleCancelEdit() {
+    setEditingId(null)
+    setError(null)
+    setSelectedClientId(null)
+    setClient({ name: '', businessId: '', vatId: '', address: '', postalCode: '', city: '', email: '' })
+    setNotes('')
+    getNextBkInvoiceNumber().then(setInvoiceNumber).catch(() => {})
+  }
+
+  // Delete a bookkeeper invoice
+  function handleDeleteInvoice(inv: BookkeeperInvoice) {
+    if (!confirm(`Delete invoice ${inv.invoiceNumber} for ${inv.clientName}?\nThis cannot be undone.`)) return
+    startTransition(async () => {
+      try {
+        await deleteBookkeeperInvoice(inv.id)
+        setHistory((prev) => prev.filter((i) => i.id !== inv.id))
+        if (editingId === inv.id) handleCancelEdit()
+        setSavedId((prev) => prev === inv.id ? null : prev)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to delete invoice.')
       }
     })
   }
@@ -254,16 +319,35 @@ export default function BookkeeperInvoiceApp({
           {/* Sticky header */}
           <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
             <div>
-              <h1 className="font-bold text-base">Bookkeeper Invoice</h1>
-              <p className="text-[10px] text-gray-400">Create an invoice for your bookkeeping services</p>
+              <h1 className="font-bold text-base">
+                {editingId ? '✎ Edit Bookkeeper Invoice' : 'Bookkeeper Invoice'}
+              </h1>
+              <p className="text-[10px] text-gray-400">
+                {editingId
+                  ? <span className="text-amber-600 font-semibold">Editing existing invoice — changes will overwrite the saved record</span>
+                  : 'Create an invoice for your bookkeeping services'}
+              </p>
             </div>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="bg-indigo-700 text-white text-xs px-4 py-1.5 rounded font-semibold hover:bg-indigo-800 disabled:opacity-50"
-            >
-              {submitting ? 'Saving…' : 'Save & Generate Invoice'}
-            </button>
+            <div className="flex gap-2">
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="bg-gray-200 text-gray-700 text-xs px-3 py-1.5 rounded font-semibold hover:bg-gray-300"
+                >
+                  Cancel Edit
+                </button>
+              )}
+              <button
+                type="submit"
+                disabled={submitting}
+                className={`text-white text-xs px-4 py-1.5 rounded font-semibold disabled:opacity-50 ${
+                  editingId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-indigo-700 hover:bg-indigo-800'
+                }`}
+              >
+                {submitting ? 'Saving…' : editingId ? 'Update Invoice' : 'Save & Generate Invoice'}
+              </button>
+            </div>
           </div>
 
           {error && (
@@ -614,19 +698,27 @@ export default function BookkeeperInvoiceApp({
                     <th className="py-2 px-3 text-left font-semibold text-gray-600">Invoice No</th>
                     <th className="py-2 px-3 text-left font-semibold text-gray-600">Client</th>
                     <th className="py-2 px-3 text-left font-semibold text-gray-600">Date</th>
+                    <th className="py-2 px-3 text-right font-semibold text-gray-600">ex-VAT</th>
+                    <th className="py-2 px-3 text-right font-semibold text-gray-600">VAT</th>
                     <th className="py-2 px-3 text-right font-semibold text-gray-600">Total</th>
                     <th className="py-2 px-3 text-center font-semibold text-gray-600">PDF</th>
+                    <th className="py-2 px-3 text-center font-semibold text-gray-600">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {history.map((inv) => (
-                    <tr key={inv.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="py-1.5 px-3 font-mono">{inv.invoiceNumber}</td>
+                    <tr key={inv.id} className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${editingId === inv.id ? 'bg-amber-50 border-amber-200' : ''}`}>
+                      <td className="py-1.5 px-3 font-mono">
+                        {inv.invoiceNumber}
+                        {editingId === inv.id && <span className="ml-1 text-amber-600 font-semibold">(editing)</span>}
+                      </td>
                       <td className="py-1.5 px-3">{inv.clientName}</td>
                       <td className="py-1.5 px-3 text-gray-500">
                         {new Date(inv.issueDate).toLocaleDateString('fi-FI', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                       </td>
-                      <td className="py-1.5 px-3 text-right font-semibold">{inv.totalIncVat.toFixed(2)} €</td>
+                      <td className="py-1.5 px-3 text-right font-mono text-gray-600">{inv.amountExVat.toFixed(2)}</td>
+                      <td className="py-1.5 px-3 text-right font-mono text-orange-600">{inv.vatAmount.toFixed(2)}</td>
+                      <td className="py-1.5 px-3 text-right font-semibold font-mono">{inv.totalIncVat.toFixed(2)} €</td>
                       <td className="py-1.5 px-3 text-center">
                         <a
                           href={`/api/bookkeeper-invoice/${inv.id}/pdf`}
@@ -635,6 +727,27 @@ export default function BookkeeperInvoiceApp({
                         >
                           PDF
                         </a>
+                      </td>
+                      <td className="py-1.5 px-3 text-center">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleEditInvoice(inv)}
+                            className="text-blue-600 hover:text-blue-800 font-semibold text-[10px] px-1.5 py-0.5 rounded hover:bg-blue-50"
+                            title="Edit this invoice"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteInvoice(inv)}
+                            disabled={submitting}
+                            className="text-red-500 hover:text-red-700 font-semibold text-[10px] px-1.5 py-0.5 rounded hover:bg-red-50 disabled:opacity-40"
+                            title="Delete this invoice"
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

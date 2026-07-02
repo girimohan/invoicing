@@ -12,11 +12,17 @@ const NAV = [
     ],
   },
   {
-    section: 'Management',
+    section: 'Clients',
     links: [
-      { href: '/clients',     label: 'Clients',             icon: '◈' },
-      { href: '/bookkeeper',  label: 'Bookkeeper Invoice',  icon: '⬡' },
-      { href: '/books',       label: 'Client Books',        icon: '◫' },
+      { href: '/clients',  label: 'Clients',           icon: '◈' },
+      { href: '/books',    label: 'Client Books',       icon: '◫' },
+    ],
+  },
+  {
+    section: 'Bookkeeper',
+    links: [
+      { href: '/bookkeeper', label: 'Issue Invoice',   icon: '⬡' },
+      { href: '/my-vat',     label: 'My VAT / Oma Vero', icon: '⊞' },
     ],
   },
   {

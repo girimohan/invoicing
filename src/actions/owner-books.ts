@@ -116,7 +116,7 @@ export async function getOwnerBooks(clientId: number, year: number) {
     ? { OR: [{ buyerClientId: clientId }, { buyerBusinessId: bizId }], ...dateFilter }
     : { buyerClientId: clientId, ...dateFilter }
 
-  const [incomes, expenses, linkedInvoices, sellerInvoices, bookkeeperInvoices] = await Promise.all([
+  const [incomes, expenses, linkedInvoices, sellerInvoices, bookkeeperInvoices, receivedBkInvoices] = await Promise.all([
     db.ownerIncomePeriod.findMany({
       where: { clientId, periodStart: { gte: yearStart, lt: yearEnd } },
       orderBy: { periodStart: 'asc' },
@@ -137,13 +137,19 @@ export async function getOwnerBooks(clientId: number, year: number) {
       include: { lineItems: { orderBy: { sortOrder: 'asc' } } },
       orderBy: { invoiceDate: 'asc' },
     }),
-    // Bookkeeper invoices ISSUED BY this client (Mohan as bookkeeper to his clients)
+    // Bookkeeper invoices ISSUED BY this client (only relevant when client IS the bookkeeper)
     bizId
       ? db.bookkeeperInvoice.findMany({
           where: { bkBusinessId: bizId, ...bkDateFilter },
           orderBy: { issueDate: 'asc' },
         })
       : Promise.resolve([]),
+    // Bookkeeper invoices RECEIVED BY this client (fees paid to bookkeeper = client's input VAT)
+    db.bookkeeperInvoice.findMany({
+      where: { clientId, ...bkDateFilter },
+      orderBy: { issueDate: 'asc' },
+      select: { id: true, invoiceNumber: true, issueDate: true, amountExVat: true, vatRate: true, vatAmount: true, totalIncVat: true },
+    }),
   ])
 
   // Deduplicate by id (OR conditions can theoretically match same invoice twice
@@ -157,5 +163,92 @@ export async function getOwnerBooks(clientId: number, year: number) {
     linkedInvoices: dedup(linkedInvoices),
     sellerInvoices: dedup(sellerInvoices),
     bookkeeperInvoices,
+    receivedBkInvoices,
+  }
+}
+
+// ─── Gig-work VAT summary for Oma Vero (used by /my-vat page) ────────────────
+// Returns per-quarter gig-work VAT breakdown WITHOUT BK invoice income
+// (BK invoices are fetched separately by getBookkeeperVatSummary to avoid double-counting)
+
+export interface GigVatQuarter {
+  quarter: number
+  gigIncomeExVat: number     // own delivery fees ex-VAT
+  tipsExVat: number          // tips (VAT-exempt)
+  gigOutputVat: number       // output VAT on own courier fees
+  subsOutputVat: number      // output VAT on substitute-worker periods (full Wolt gross × rate)
+  workerInputVat: number     // input VAT on substitute worker invoices (deductible)
+  expenseInputVat: number    // input VAT on own business expenses (deductible)
+}
+
+export async function getGigVatSummary(clientId: number, year: number): Promise<{
+  clientName: string
+  quarters: GigVatQuarter[]
+  annualGigOutputVat: number
+  annualSubsOutputVat: number
+  annualWorkerInputVat: number
+  annualExpenseInputVat: number
+}> {
+  const yearStart = new Date(`${year}-01-01`)
+  const yearEnd   = new Date(`${year + 1}-01-01`)
+  const r2 = (n: number) => Math.round(n * 100) / 100
+
+  const clientRecord = await db.client.findUnique({
+    where: { id: clientId },
+    select: { name: true, businessId: true },
+  })
+  const bizId = clientRecord?.businessId ?? null
+
+  const dateFilter   = { invoiceDate: { gte: yearStart, lt: yearEnd } }
+  const buyerCondition = bizId
+    ? { OR: [{ buyerClientId: clientId }, { buyerBusinessId: bizId }], ...dateFilter }
+    : { buyerClientId: clientId, ...dateFilter }
+
+  const [incomes, expenses, linkedInvoices] = await Promise.all([
+    db.ownerIncomePeriod.findMany({
+      where: { clientId, periodStart: { gte: yearStart, lt: yearEnd } },
+      select: { periodStart: true, totalExVat: true, tipsExVat: true, vatRate: true, vatAmount: true },
+    }),
+    db.ownerExpense.findMany({
+      where: { clientId, date: { gte: yearStart, lt: yearEnd } },
+      select: { date: true, vatAmount: true },
+    }),
+    db.invoice.findMany({
+      where: buyerCondition,
+      select: {
+        id: true, invoiceDate: true, totalVat: true,
+        lineItems: { select: { earnedAmount: true, vatRate: true } },
+      },
+    }),
+  ])
+
+  const dedupLinked = linkedInvoices.filter((item, i, a) => a.findIndex(x => x.id === item.id) === i)
+
+  function getQ(d: Date | string) { return Math.floor(new Date(d).getMonth() / 3) + 1 }
+
+  const quarters: GigVatQuarter[] = [1, 2, 3, 4].map((q) => {
+    const qi   = incomes.filter(i => getQ(i.periodStart) === q)
+    const ql   = dedupLinked.filter(i => getQ(i.invoiceDate) === q)
+    const qe   = expenses.filter(e => getQ(e.date) === q)
+    const qlItems = ql.flatMap(i => i.lineItems)
+
+    return {
+      quarter: q,
+      gigIncomeExVat: r2(qi.reduce((s, i) => s + i.totalExVat, 0)),
+      tipsExVat:      r2(qi.reduce((s, i) => s + (i.tipsExVat ?? 0), 0)),
+      gigOutputVat:   r2(qi.reduce((s, i) => s + i.vatAmount, 0)),
+      subsOutputVat:  r2(qlItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0)),
+      workerInputVat: r2(ql.reduce((s, i) => s + i.totalVat, 0)),
+      expenseInputVat: r2(qe.reduce((s, e) => s + e.vatAmount, 0)),
+    }
+  })
+
+  return {
+    clientName: clientRecord?.name ?? '',
+    quarters,
+    annualGigOutputVat:   r2(quarters.reduce((s, q) => s + q.gigOutputVat, 0)),
+    annualSubsOutputVat:  r2(quarters.reduce((s, q) => s + q.subsOutputVat, 0)),
+    annualWorkerInputVat: r2(quarters.reduce((s, q) => s + q.workerInputVat, 0)),
+    annualExpenseInputVat: r2(quarters.reduce((s, q) => s + q.expenseInputVat, 0)),
   }
 }

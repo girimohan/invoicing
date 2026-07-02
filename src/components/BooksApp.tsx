@@ -116,6 +116,7 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
   const [linkedInvoices, setLinkedInvoices] = useState<LinkedInvoice[]>([])
   const [sellerInvoices, setSellerInvoices] = useState<LinkedInvoice[]>([])
   const [bookkeeperInvoices, setBookkeeperInvoices] = useState<BookkeeperInvoice[]>([])
+  const [receivedBkInvoices, setReceivedBkInvoices] = useState<{ id: string; invoiceNumber: string; issueDate: Date; amountExVat: number; vatRate: number; vatAmount: number; totalIncVat: number }[]>([])
   const [showAddIncome, setShowAddIncome] = useState(false)
   const [showAddExpense, setShowAddExpense] = useState(false)
   const [expandWorkerInvoices, setExpandWorkerInvoices] = useState(false)
@@ -134,14 +135,15 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
   useEffect(() => {
     if (selectedClientId === null) return
     setLoading(true)
-    setIncomes([]); setExpenses([]); setLinkedInvoices([]); setSellerInvoices([]); setBookkeeperInvoices([])
+    setIncomes([]); setExpenses([]); setLinkedInvoices([]); setSellerInvoices([]); setBookkeeperInvoices([]); setReceivedBkInvoices([])
     getOwnerBooks(selectedClientId, selectedYear)
-      .then(({ incomes, expenses, linkedInvoices, sellerInvoices, bookkeeperInvoices }) => {
+      .then(({ incomes, expenses, linkedInvoices, sellerInvoices, bookkeeperInvoices, receivedBkInvoices }) => {
         setIncomes(incomes as IncomePeriod[])
         setExpenses(expenses as Expense[])
         setLinkedInvoices(linkedInvoices as unknown as LinkedInvoice[])
         setSellerInvoices(sellerInvoices as unknown as LinkedInvoice[])
         setBookkeeperInvoices((bookkeeperInvoices ?? []) as unknown as BookkeeperInvoice[])
+        setReceivedBkInvoices((receivedBkInvoices ?? []) as unknown as typeof receivedBkInvoices)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -187,15 +189,18 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
 
   const netProfit = r2(incomeExVat - otherExpExVat)
 
+  // ── Bookkeeper fees received by this client (their INPUT VAT, deductible) ──
+  const clientBkFeeInputVat = r2(receivedBkInvoices.reduce((s, i) => s + i.vatAmount, 0))
+
   // VAT filing:
-  // Account holder output = VAT on own Wolt income + VAT on FULL Wolt gross for sub periods + bookkeeping VAT
-  //           input  = worker invoice VAT (deductible) + other expense VAT
+  // Account holder output = VAT on own Wolt income + VAT on FULL Wolt gross for sub periods + bookkeeping VAT (if this client IS the bookkeeper)
+  //           input  = worker invoice VAT + bookkeeper fee paid VAT (deductible) + other expense VAT
   const filingOutputVat = isAccountHolder
     ? r2(totalIncomeVat + woltOutputVatFromSubs + bkIncomeVat)
     : sellerIncomeVat
   const filingInputVat = isAccountHolder
-    ? r2(workerCostVat + otherExpVat)
-    : otherExpVat
+    ? r2(workerCostVat + clientBkFeeInputVat + otherExpVat)
+    : r2(clientBkFeeInputVat + otherExpVat)
   const netVatPayable = r2(filingOutputVat - filingInputVat)
 
   function quarterData(q: number) {
@@ -204,6 +209,7 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
     const qs = sellerInvoices.filter(i => getQuarter(i.invoiceDate) === q)
     const qe = expenses.filter(e => getQuarter(e.date) === q)
     const qbk = bookkeeperInvoices.filter(i => getQuarter(i.issueDate) === q)
+    const qRecBk = receivedBkInvoices.filter(i => getQuarter(i.issueDate) === q)
     const qlItems = ql.flatMap(i => i.lineItems)
     if (isAccountHolder) {
       const outVatOwn  = r2(qi.reduce((s, i) => s + i.vatAmount, 0))
@@ -211,12 +217,14 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
       const outVatBk   = r2(qbk.reduce((s, i) => s + i.vatAmount, 0))
       const outVat     = r2(outVatOwn + outVatSubs + outVatBk)
       const inVatW     = r2(ql.reduce((s, i) => s + i.totalVat, 0))
+      const inVatBkFee = r2(qRecBk.reduce((s, i) => s + i.vatAmount, 0))
       const inVatE     = r2(qe.reduce((s, e) => s + e.vatAmount, 0))
-      return { outVat, outVatOwn, outVatSubs, outVatBk, inVatW, inVatE, net: r2(outVat - inVatW - inVatE) }
+      return { outVat, outVatOwn, outVatSubs, outVatBk, inVatW, inVatBkFee, inVatE, net: r2(outVat - inVatW - inVatBkFee - inVatE) }
     } else {
-      const outVat = r2(qs.reduce((s, i) => s + i.totalVat, 0))
-      const inVatE = r2(qe.reduce((s, e) => s + e.vatAmount, 0))
-      return { outVat, outVatOwn: 0, outVatSubs: 0, outVatBk: 0, inVatW: 0, inVatE, net: r2(outVat - inVatE) }
+      const outVat    = r2(qs.reduce((s, i) => s + i.totalVat, 0))
+      const inVatBkFee = r2(qRecBk.reduce((s, i) => s + i.vatAmount, 0))
+      const inVatE    = r2(qe.reduce((s, e) => s + e.vatAmount, 0))
+      return { outVat, outVatOwn: 0, outVatSubs: 0, outVatBk: 0, inVatW: 0, inVatBkFee, inVatE, net: r2(outVat - inVatBkFee - inVatE) }
     }
   }
 
@@ -1027,31 +1035,36 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                       <tr>
                         <th className="text-left px-4 py-3 font-semibold text-gray-600">Quarter</th>
                         <th className="text-right px-3 py-3 font-semibold text-green-700">
-                          Output VAT<br/><span className="text-[10px] font-normal text-gray-400">Own income</span>
+                          Myyntivero<br/><span className="text-[10px] font-normal text-gray-400">Wolt own income</span>
                         </th>
                         {linkedInvoices.length > 0 && (
                           <th className="text-right px-3 py-3 font-semibold text-indigo-600">
-                            Output VAT<br/><span className="text-[10px] font-normal text-gray-400">Sub periods</span>
+                            Myyntivero<br/><span className="text-[10px] font-normal text-gray-400">via substitutes</span>
                           </th>
                         )}
                         {bookkeeperInvoices.length > 0 && (
                           <th className="text-right px-3 py-3 font-semibold text-teal-700">
-                            Output VAT<br/><span className="text-[10px] font-normal text-gray-400">BK services</span>
+                            Myyntivero<br/><span className="text-[10px] font-normal text-gray-400">BK services (if you)</span>
                           </th>
                         )}
                         <th className="text-right px-3 py-3 font-semibold text-green-800">
-                          Total Output<br/><span className="text-[10px] font-normal text-gray-400">to remit</span>
+                          Total Output<br/><span className="text-[10px] font-normal text-gray-400">→ Vero owes</span>
                         </th>
                         {linkedInvoices.length > 0 && (
                           <th className="text-right px-3 py-3 font-semibold text-orange-600">
-                            Input VAT<br/><span className="text-[10px] font-normal text-gray-400">Worker inv.</span>
+                            Ostovero<br/><span className="text-[10px] font-normal text-gray-400">worker invoices</span>
+                          </th>
+                        )}
+                        {receivedBkInvoices.length > 0 && (
+                          <th className="text-right px-3 py-3 font-semibold text-purple-600">
+                            Ostovero<br/><span className="text-[10px] font-normal text-gray-400">BK fee paid ✓ deduct</span>
                           </th>
                         )}
                         <th className="text-right px-3 py-3 font-semibold text-red-600">
-                          Input VAT<br/><span className="text-[10px] font-normal text-gray-400">Expenses</span>
+                          Ostovero<br/><span className="text-[10px] font-normal text-gray-400">other expenses</span>
                         </th>
                         <th className="text-right px-3 py-3 font-semibold text-blue-700">
-                          Net<br/><span className="text-[10px] font-normal text-gray-400">payable</span>
+                          Net payable<br/><span className="text-[10px] font-normal text-gray-400">to Vero</span>
                         </th>
                       </tr>
                     </thead>
@@ -1068,6 +1081,7 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                             {bookkeeperInvoices.length > 0 && <td className="px-3 py-3 text-right font-mono text-teal-700">{fmt(d.outVatBk)}</td>}
                             <td className="px-3 py-3 text-right font-mono font-bold text-green-800">{fmt(d.outVat)}</td>
                             {linkedInvoices.length > 0 && <td className="px-3 py-3 text-right font-mono text-orange-600">{fmt(d.inVatW)}</td>}
+                            {receivedBkInvoices.length > 0 && <td className="px-3 py-3 text-right font-mono text-purple-600">{fmt(d.inVatBkFee)}</td>}
                             <td className="px-3 py-3 text-right font-mono text-red-600">{fmt(d.inVatE)}</td>
                             <td className={`px-3 py-3 text-right font-mono font-bold ${d.net >= 0 ? 'text-blue-700' : 'text-green-600'}`}>{fmt(d.net)}</td>
                           </tr>
@@ -1082,6 +1096,7 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                         {bookkeeperInvoices.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-teal-700">{fmt(bkIncomeVat)}</td>}
                         <td className="px-3 py-3 text-right font-bold font-mono text-green-800">{fmt(filingOutputVat)}</td>
                         {linkedInvoices.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-orange-600">{fmt(workerCostVat)}</td>}
+                        {receivedBkInvoices.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-purple-600">{fmt(clientBkFeeInputVat)}</td>}
                         <td className="px-3 py-3 text-right font-bold font-mono text-red-600">{fmt(otherExpVat)}</td>
                         <td className={`px-3 py-3 text-right font-bold font-mono text-lg ${netVatPayable >= 0 ? 'text-blue-700' : 'text-green-600'}`}>{fmt(netVatPayable)}</td>
                       </tr>
@@ -1124,11 +1139,92 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                 )}
               </div>
 
+              {/* ── VAT logic explainer (account holders) ── */}
+              {isAccountHolder && (
+                <div className="grid grid-cols-3 gap-3 mb-4 text-xs">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                    <div className="font-bold text-green-800 mb-1">📥 Myyntivero (output VAT)</div>
+                    <div className="text-green-700">Wolt pays your courier fees <strong>including VAT</strong>. You collected this VAT — it must be returned to Vero.</div>
+                    <div className="mt-1 font-mono font-bold text-green-800">{fmt(filingOutputVat)} €</div>
+                  </div>
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                    <div className="font-bold text-purple-800 mb-1">📤 Ostovero (input VAT, deductible)</div>
+                    <div className="text-purple-700">VAT you paid on your business purchases — <strong>worker fees, bookkeeper fee, expenses</strong>. Deduct this from your Vero payment.</div>
+                    <div className="mt-1 font-mono font-bold text-purple-800">{fmt(filingInputVat)} €</div>
+                  </div>
+                  <div className={`rounded-lg p-3 border ${netVatPayable >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                    <div className={`font-bold mb-1 ${netVatPayable >= 0 ? 'text-blue-800' : 'text-emerald-800'}`}>
+                      {netVatPayable >= 0 ? '→ You pay Vero' : '→ Vero refunds you'}
+                    </div>
+                    <div className={`text-xs ${netVatPayable >= 0 ? 'text-blue-700' : 'text-emerald-700'}`}>
+                      Myyntivero {fmt(filingOutputVat)} − Ostovero {fmt(filingInputVat)}
+                    </div>
+                    <div className={`mt-1 font-mono font-bold text-lg ${netVatPayable >= 0 ? 'text-blue-800' : 'text-emerald-800'}`}>{fmt(Math.abs(netVatPayable))} €</div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Received bookkeeper invoices (client's deductible input VAT) ── */}
+              {receivedBkInvoices.length > 0 && (
+                <div className="bg-purple-50 border border-purple-200 rounded-xl overflow-hidden mb-4">
+                  <div className="px-4 py-3 flex items-center justify-between">
+                    <div>
+                      <div className="text-xs font-bold text-purple-800">Bookkeeper service invoices received — your deductible VAT</div>
+                      <div className="text-[10px] text-purple-600 mt-0.5">
+                        These are invoices your bookkeeper issued to you. The VAT column is your <strong>ostovero</strong> — deduct it from your Vero payment.
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 ml-4">
+                      <div className="text-[10px] text-purple-500">Deductible VAT</div>
+                      <div className="text-base font-bold text-purple-700 font-mono">{fmt(clientBkFeeInputVat)} €</div>
+                    </div>
+                  </div>
+                  <table className="w-full text-xs border-t border-purple-200">
+                    <thead className="bg-white">
+                      <tr>
+                        <th className="text-left px-4 py-2 font-semibold text-gray-500">Invoice #</th>
+                        <th className="text-left px-3 py-2 font-semibold text-gray-500">Date</th>
+                        <th className="text-right px-3 py-2 font-semibold text-gray-600">Service ex-VAT</th>
+                        <th className="text-right px-3 py-2 font-semibold text-purple-700">VAT (deductible)</th>
+                        <th className="text-right px-4 py-2 font-semibold text-gray-600">Total paid</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {receivedBkInvoices.map((inv, idx) => (
+                        <tr key={inv.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-purple-50/40'}>
+                          <td className="px-4 py-2 font-mono text-[11px] text-gray-500">{inv.invoiceNumber}</td>
+                          <td className="px-3 py-2 text-gray-600">{fmtDate(inv.issueDate)}</td>
+                          <td className="px-3 py-2 text-right font-mono text-gray-700">{fmt(inv.amountExVat)}</td>
+                          <td className="px-3 py-2 text-right font-mono font-bold text-purple-700">{fmt(inv.vatAmount)} €</td>
+                          <td className="px-4 py-2 text-right font-mono font-semibold text-gray-800">{fmt(inv.totalIncVat)} €</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="border-t border-purple-200 bg-purple-100">
+                      <tr>
+                        <td colSpan={3} className="px-4 py-2 text-xs font-bold text-purple-800">Total deductible</td>
+                        <td className="px-3 py-2 text-right font-bold font-mono text-purple-700">{fmt(clientBkFeeInputVat)} €</td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+
+              {/* ── How to file ── */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-xs text-blue-700">
-                <strong>How to file:</strong> OmaVero → Arvonlisävero → Ilmoita ALV.
+                <strong>How to file in OmaVero:</strong> Arvonlisävero → Ilmoita ALV.
                 {isAccountHolder
-                  ? <> Output VAT <strong>{fmt(filingOutputVat)} €</strong> → <em>Vero kotimaan myynneistä</em>. Input VAT <strong>{fmt(filingInputVat)} €</strong> → <em>Vähennettävä vero</em>.</>
-                  : <> Output VAT <strong>{fmt(sellerIncomeVat)} €</strong> → <em>Vero kotimaan myynneistä</em>{otherExpVat > 0 ? <>, input VAT <strong>{fmt(otherExpVat)} €</strong> → <em>Vähennettävä vero</em></> : ''}</>}
+                  ? <>
+                      {' '}Enter <em>Vero kotimaan myynneistä</em> = <strong>{fmt(filingOutputVat)} €</strong> (output VAT from Wolt income).
+                      {' '}Enter <em>Vähennettävä vero</em> = <strong>{fmt(filingInputVat)} €</strong> (all purchase VAT you paid
+                      {clientBkFeeInputVat > 0 && <>, incl. <strong>{fmt(clientBkFeeInputVat)} €</strong> bookkeeper fee</>}
+                      ).
+                    </>
+                  : <>
+                      {' '}Enter <em>Vero kotimaan myynneistä</em> = <strong>{fmt(sellerIncomeVat)} €</strong>.
+                      {filingInputVat > 0 && <> Enter <em>Vähennettävä vero</em> = <strong>{fmt(filingInputVat)} €</strong>.</>}
+                    </>}
                 {' '}Net {netVatPayable >= 0 ? 'payable' : 'refund'}: <strong>{fmt(Math.abs(netVatPayable))} €</strong>.
               </div>
             </div>
