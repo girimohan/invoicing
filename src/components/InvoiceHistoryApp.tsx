@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useState, useTransition, useMemo } from 'react'
 import { deleteInvoice } from '@/actions/invoice'
+import { round2, getQuarter, formatCurrency as fmt } from '@/lib/calculations'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,10 +50,6 @@ function fmtDate(d: Date) {
   })
 }
 
-function fmt(n: number) { return n.toFixed(2) }
-
-function round2(n: number) { return Math.round(n * 100) / 100 }
-
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function InvoiceHistoryApp({ invoices: initial }: Props) {
@@ -63,35 +60,145 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
   const [expandedOwner, setExpandedOwner] = useState<string | null>(null)
   const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
 
   // Available years from invoice data
-  const years = Array.from(
-    new Set(invoices.map((inv) => new Date(inv.invoiceDate).getFullYear()))
-  ).sort((a, b) => b - a)
-  if (!years.includes(new Date().getFullYear())) years.unshift(new Date().getFullYear())
+  const years = useMemo(() => {
+    const ys = Array.from(
+      new Set(invoices.map((inv) => new Date(inv.invoiceDate).getFullYear()))
+    ).sort((a, b) => b - a)
+    if (!ys.includes(new Date().getFullYear())) ys.unshift(new Date().getFullYear())
+    return ys
+  }, [invoices])
 
   // Filter by selected year
-  const yearInvoices = invoices.filter(
-    (inv) => new Date(inv.invoiceDate).getFullYear() === selectedYear
+  const yearInvoices = useMemo(
+    () => invoices.filter((inv) => new Date(inv.invoiceDate).getFullYear() === selectedYear),
+    [invoices, selectedYear]
   )
 
   // ── Group by worker (seller) ──────────────────────────────────────────────
-  const workerMap = new Map<string, { name: string; businessId: string; clientId: number | null; displayId: string | null; invoices: Invoice[] }>()
-
-  for (const inv of yearInvoices) {
-    const key = inv.sellerName
-    if (!workerMap.has(key)) {
-      workerMap.set(key, {
-        name: inv.sellerName,
-        businessId: inv.sellerBusinessId,
-        clientId: inv.clientId,
-        displayId: inv.client?.displayId ?? null,
-        invoices: [],
-      })
+  const workers = useMemo(() => {
+    const workerMap = new Map<string, { name: string; businessId: string; clientId: number | null; displayId: string | null; invoices: Invoice[] }>()
+    for (const inv of yearInvoices) {
+      const key = inv.sellerName
+      if (!workerMap.has(key)) {
+        workerMap.set(key, {
+          name: inv.sellerName,
+          businessId: inv.sellerBusinessId,
+          clientId: inv.clientId,
+          displayId: inv.client?.displayId ?? null,
+          invoices: [],
+        })
+      }
+      workerMap.get(key)!.invoices.push(inv)
     }
-    workerMap.get(key)!.invoices.push(inv)
-  }
-  const workers = Array.from(workerMap.values()).sort((a, b) => a.name.localeCompare(b.name))
+    return Array.from(workerMap.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [yearInvoices])
+
+  // ── Per-worker VAT breakdown + quarterly summary (computed once per worker set) ──
+  const workerBreakdowns = useMemo(() => {
+    const map = new Map<string, {
+      wVatBreakdown: { rate: number; base: number; vat: number }[]
+      wQuarters: { q: number; base: number; vat: number; total: number; count: number }[]
+    }>()
+    for (const worker of workers) {
+      const wVatMap = new Map<number, { base: number; vat: number }>()
+      for (const inv of worker.invoices) {
+        for (const item of inv.lineItems) {
+          const e = wVatMap.get(item.vatRate) ?? { base: 0, vat: 0 }
+          wVatMap.set(item.vatRate, {
+            base: round2(e.base + item.amountExVat),
+            vat: round2(e.vat + item.vatAmount),
+          })
+        }
+      }
+      const wVatBreakdown = Array.from(wVatMap.entries())
+        .map(([rate, { base, vat }]) => ({ rate, base, vat }))
+        .sort((a, b) => b.rate - a.rate)
+      const wQuarters = [1, 2, 3, 4].map(q => {
+        // Use periodEnd (work period), not invoiceDate — a period invoiced
+        // the following month must still land in the quarter it was earned.
+        const qInvs = worker.invoices.filter(inv => getQuarter(inv.periodEnd) === q)
+        return {
+          q,
+          base: round2(qInvs.reduce((s, inv) => s + inv.totalExVat, 0)),
+          vat: round2(qInvs.reduce((s, inv) => s + inv.totalVat, 0)),
+          total: round2(qInvs.reduce((s, inv) => s + inv.totalIncVat, 0)),
+          count: qInvs.length,
+        }
+      })
+      map.set(worker.name, { wVatBreakdown, wQuarters })
+    }
+    return map
+  }, [workers])
+
+  // ── Group by account holder (owner view) ─────────────────────────────────
+  const owners = useMemo(() => {
+    const ownerMap = new Map<string, {
+      key: string
+      name: string
+      clientId: number | null
+      displayId: string | null
+      invoices: Invoice[]
+    }>()
+    for (const inv of yearInvoices) {
+      const key = inv.buyerClientId ? String(inv.buyerClientId) : `name:${inv.buyerName}`
+      if (!ownerMap.has(key)) {
+        ownerMap.set(key, {
+          key,
+          name: inv.buyerClient?.name ?? inv.buyerName,
+          clientId: inv.buyerClientId,
+          displayId: inv.buyerClient?.displayId ?? null,
+          invoices: [],
+        })
+      }
+      ownerMap.get(key)!.invoices.push(inv)
+    }
+    return Array.from(ownerMap.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [yearInvoices])
+
+  // ── Per-owner financials + quarterly VAT breakdown (computed once per owner set) ──
+  const ownerBreakdowns = useMemo(() => {
+    const map = new Map<string, {
+      woltIncomeExVat: number; outputVat: number; workerPaymentsExVat: number
+      inputVat: number; netVatToRemit: number; holderNetIncome: number; totalWorkerCost: number
+      quarters: { q: number; wolt: number; outVat: number; workerEx: number; inVat: number; netVat: number; count: number }[]
+    }>()
+    for (const owner of owners) {
+      const allItems = owner.invoices.flatMap(i => i.lineItems)
+
+      const woltIncomeExVat     = round2(allItems.reduce((s, li) => s + li.earnedAmount, 0))
+      const outputVat           = round2(allItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0))
+      const workerPaymentsExVat = round2(owner.invoices.reduce((s, i) => s + i.totalExVat, 0))
+      const inputVat            = round2(owner.invoices.reduce((s, i) => s + i.totalVat, 0))
+      const netVatToRemit       = round2(outputVat - inputVat)
+      const holderNetIncome     = round2(woltIncomeExVat - workerPaymentsExVat)
+      const totalWorkerCost     = round2(owner.invoices.reduce((s, i) => s + i.totalIncVat, 0))
+
+      // Use periodEnd (work period), not invoiceDate — a period invoiced the
+      // following month must still land in the quarter it was earned.
+      const quarters = [1, 2, 3, 4].map(q => {
+        const qInvs  = owner.invoices.filter(i => getQuarter(i.periodEnd) === q)
+        const qItems = qInvs.flatMap(i => i.lineItems)
+        return {
+          q,
+          wolt:      round2(qItems.reduce((s, li) => s + li.earnedAmount, 0)),
+          outVat:    round2(qItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0)),
+          workerEx:  round2(qInvs.reduce((s, i) => s + i.totalExVat, 0)),
+          inVat:     round2(qInvs.reduce((s, i) => s + i.totalVat, 0)),
+          netVat:    round2(
+            qItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0) -
+            qInvs.reduce((s, i) => s + i.totalVat, 0)
+          ),
+          count: qInvs.length,
+        }
+      })
+
+      map.set(owner.key, { woltIncomeExVat, outputVat, workerPaymentsExVat, inputVat, netVatToRemit, holderNetIncome, totalWorkerCost, quarters })
+    }
+    return map
+  }, [owners])
 
   // ── Per worker totals ─────────────────────────────────────────────────────
   function workerTotals(invs: Invoice[]) {
@@ -105,9 +212,14 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
   // ── Delete ────────────────────────────────────────────────────────────────
   function handleDelete(inv: Invoice) {
     if (!confirm(`Delete invoice ${inv.invoiceNumber}? This cannot be undone.`)) return
+    setError(null)
     startTransition(async () => {
-      await deleteInvoice(inv.id)
-      setInvoices((prev) => prev.filter((i) => i.id !== inv.id))
+      try {
+        await deleteInvoice(inv.id)
+        setInvoices((prev) => prev.filter((i) => i.id !== inv.id))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to delete invoice.')
+      }
     })
   }
 
@@ -126,6 +238,12 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
           + New Invoice
         </a>
       </div>
+
+      {error && (
+        <div className="mb-4 text-xs bg-red-50 border border-red-200 text-red-700 rounded px-3 py-2">
+          {error}
+        </div>
+      )}
 
       {/* ── Year + view mode selectors ── */}
       <div className="flex items-center justify-between mb-5">
@@ -219,29 +337,7 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                       <div className="border-t border-gray-100">
                         {/* Per-worker VAT Filing Summary */}
                         {(() => {
-                          const wVatMap = new Map<number, { base: number; vat: number }>()
-                          for (const inv of worker.invoices) {
-                            for (const item of inv.lineItems) {
-                              const e = wVatMap.get(item.vatRate) ?? { base: 0, vat: 0 }
-                              wVatMap.set(item.vatRate, {
-                                base: round2(e.base + item.amountExVat),
-                                vat: round2(e.vat + item.vatAmount),
-                              })
-                            }
-                          }
-                          const wVatBreakdown = Array.from(wVatMap.entries())
-                            .map(([rate, { base, vat }]) => ({ rate, base, vat }))
-                            .sort((a, b) => b.rate - a.rate)
-                          const wQuarters = [1, 2, 3, 4].map(q => {
-                            const qInvs = worker.invoices.filter(inv => Math.floor(new Date(inv.invoiceDate).getMonth() / 3) + 1 === q)
-                            return {
-                              q,
-                              base: round2(qInvs.reduce((s, inv) => s + inv.totalExVat, 0)),
-                              vat: round2(qInvs.reduce((s, inv) => s + inv.totalVat, 0)),
-                              total: round2(qInvs.reduce((s, inv) => s + inv.totalIncVat, 0)),
-                              count: qInvs.length,
-                            }
-                          })
+                          const { wVatBreakdown, wQuarters } = workerBreakdowns.get(worker.name)!
                           return (
                             <div className="px-4 py-4 border-b border-gray-200 bg-amber-50/30">
                               <div className="text-[10px] font-bold uppercase tracking-widest text-amber-700 mb-3">
@@ -434,31 +530,6 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
       ) : (
         /* ══ BY OWNER VIEW ══════════════════════════════════════════════════ */
         (() => {
-          // Group invoices by account holder (buyerClientId → buyerClient, or buyerName fallback)
-          const ownerMap = new Map<string, {
-            key: string
-            name: string
-            clientId: number | null
-            displayId: string | null
-            invoices: Invoice[]
-          }>()
-          for (const inv of yearInvoices) {
-            const key = inv.buyerClientId ? String(inv.buyerClientId) : `name:${inv.buyerName}`
-            if (!ownerMap.has(key)) {
-              ownerMap.set(key, {
-                key,
-                name: inv.buyerClient?.name ?? inv.buyerName,
-                clientId: inv.buyerClientId,
-                displayId: inv.buyerClient?.displayId ?? null,
-                invoices: [],
-              })
-            }
-            ownerMap.get(key)!.invoices.push(inv)
-          }
-          const owners = Array.from(ownerMap.values()).sort((a, b) => a.name.localeCompare(b.name))
-
-          function qOf(d: Date) { return Math.floor(new Date(d).getMonth() / 3) + 1 }
-
           return (
             <div className="space-y-8">
               <p className="text-[10px] text-gray-400 -mb-2">
@@ -468,37 +539,10 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                 <div className="text-center py-12 text-gray-400 text-sm">No account holder links found for {selectedYear}. Link invoices to a client using the Account Holder field when creating them.</div>
               )}
               {owners.map((owner) => {
-                // ── Compute financials ───────────────────────────────────────
-                // earnedAmount = gross Wolt income for that line (before splitting by sharePercent)
-                // amountExVat  = earnedAmount * sharePercent/100  (worker's portion, ex-VAT)
-                // vatAmount    = amountExVat * vatRate/100         (VAT the holder pays to worker)
-                const allItems = owner.invoices.flatMap(i => i.lineItems)
-
-                const woltIncomeExVat     = round2(allItems.reduce((s, li) => s + li.earnedAmount, 0))
-                const outputVat           = round2(allItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0))
-                const workerPaymentsExVat = round2(owner.invoices.reduce((s, i) => s + i.totalExVat, 0))
-                const inputVat            = round2(owner.invoices.reduce((s, i) => s + i.totalVat, 0))
-                const netVatToRemit       = round2(outputVat - inputVat)
-                const holderNetIncome     = round2(woltIncomeExVat - workerPaymentsExVat)
-                const totalWorkerCost     = round2(owner.invoices.reduce((s, i) => s + i.totalIncVat, 0))
-
-                // ── Quarterly VAT breakdown ──────────────────────────────────
-                const quarters = [1, 2, 3, 4].map(q => {
-                  const qInvs  = owner.invoices.filter(i => qOf(i.invoiceDate) === q)
-                  const qItems = qInvs.flatMap(i => i.lineItems)
-                  return {
-                    q,
-                    wolt:      round2(qItems.reduce((s, li) => s + li.earnedAmount, 0)),
-                    outVat:    round2(qItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0)),
-                    workerEx:  round2(qInvs.reduce((s, i) => s + i.totalExVat, 0)),
-                    inVat:     round2(qInvs.reduce((s, i) => s + i.totalVat, 0)),
-                    netVat:    round2(
-                      qItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0) -
-                      qInvs.reduce((s, i) => s + i.totalVat, 0)
-                    ),
-                    count: qInvs.length,
-                  }
-                })
+                const {
+                  woltIncomeExVat, outputVat, workerPaymentsExVat, inputVat,
+                  netVatToRemit, holderNetIncome, totalWorkerCost, quarters,
+                } = ownerBreakdowns.get(owner.key)!
 
                 const isOwnerOpen = expandedOwner === owner.key
 

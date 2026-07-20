@@ -2,6 +2,7 @@
 
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
+import { round2, getQuarter } from '@/lib/calculations'
 
 // ─── Input types ──────────────────────────────────────────────────────────────
 
@@ -105,7 +106,9 @@ export async function getOwnerBooks(clientId: number, year: number) {
   const bizId = clientRecord?.businessId ?? null
 
   const dateFilter = { invoiceDate: { gte: yearStart, lt: yearEnd } }
-  const bkDateFilter = { issueDate: { gte: yearStart, lt: yearEnd } }
+  // Bookkeeper invoices are bucketed into VAT periods by service period end,
+  // not issueDate — matches how client invoices use periodEnd (see getGigVatSummary).
+  const bkDateFilter = { periodEnd: { gte: yearStart, lt: yearEnd } }
 
   // Build OR conditions for seller-side and buyer-side invoice lookup
   const sellerCondition = bizId
@@ -141,14 +144,14 @@ export async function getOwnerBooks(clientId: number, year: number) {
     bizId
       ? db.bookkeeperInvoice.findMany({
           where: { bkBusinessId: bizId, ...bkDateFilter },
-          orderBy: { issueDate: 'asc' },
+          orderBy: { periodEnd: 'asc' },
         })
       : Promise.resolve([]),
     // Bookkeeper invoices RECEIVED BY this client (fees paid to bookkeeper = client's input VAT)
     db.bookkeeperInvoice.findMany({
       where: { clientId, ...bkDateFilter },
-      orderBy: { issueDate: 'asc' },
-      select: { id: true, invoiceNumber: true, issueDate: true, amountExVat: true, vatRate: true, vatAmount: true, totalIncVat: true },
+      orderBy: { periodEnd: 'asc' },
+      select: { id: true, invoiceNumber: true, issueDate: true, periodStart: true, periodEnd: true, amountExVat: true, vatRate: true, vatAmount: true, totalIncVat: true },
     }),
   ])
 
@@ -191,7 +194,6 @@ export async function getGigVatSummary(clientId: number, year: number): Promise<
 }> {
   const yearStart = new Date(`${year}-01-01`)
   const yearEnd   = new Date(`${year + 1}-01-01`)
-  const r2 = (n: number) => Math.round(n * 100) / 100
 
   const clientRecord = await db.client.findUnique({
     where: { id: clientId },
@@ -216,7 +218,7 @@ export async function getGigVatSummary(clientId: number, year: number): Promise<
     db.invoice.findMany({
       where: buyerCondition,
       select: {
-        id: true, invoiceDate: true, totalVat: true,
+        id: true, invoiceDate: true, periodEnd: true, totalVat: true,
         lineItems: { select: { earnedAmount: true, vatRate: true } },
       },
     }),
@@ -224,31 +226,30 @@ export async function getGigVatSummary(clientId: number, year: number): Promise<
 
   const dedupLinked = linkedInvoices.filter((item, i, a) => a.findIndex(x => x.id === item.id) === i)
 
-  function getQ(d: Date | string) { return Math.floor(new Date(d).getMonth() / 3) + 1 }
-
   const quarters: GigVatQuarter[] = [1, 2, 3, 4].map((q) => {
-    const qi   = incomes.filter(i => getQ(i.periodStart) === q)
-    const ql   = dedupLinked.filter(i => getQ(i.invoiceDate) === q)
-    const qe   = expenses.filter(e => getQ(e.date) === q)
+    const qi   = incomes.filter(i => getQuarter(i.periodStart) === q)
+    // Use periodEnd (service period) not invoiceDate for VAT quarter — Jun 15-30 job invoiced in Jul = Q2 VAT
+    const ql   = dedupLinked.filter(i => getQuarter(i.periodEnd) === q)
+    const qe   = expenses.filter(e => getQuarter(e.date) === q)
     const qlItems = ql.flatMap(i => i.lineItems)
 
     return {
       quarter: q,
-      gigIncomeExVat: r2(qi.reduce((s, i) => s + i.totalExVat, 0)),
-      tipsExVat:      r2(qi.reduce((s, i) => s + (i.tipsExVat ?? 0), 0)),
-      gigOutputVat:   r2(qi.reduce((s, i) => s + i.vatAmount, 0)),
-      subsOutputVat:  r2(qlItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0)),
-      workerInputVat: r2(ql.reduce((s, i) => s + i.totalVat, 0)),
-      expenseInputVat: r2(qe.reduce((s, e) => s + e.vatAmount, 0)),
+      gigIncomeExVat: round2(qi.reduce((s, i) => s + i.totalExVat, 0)),
+      tipsExVat:      round2(qi.reduce((s, i) => s + (i.tipsExVat ?? 0), 0)),
+      gigOutputVat:   round2(qi.reduce((s, i) => s + i.vatAmount, 0)),
+      subsOutputVat:  round2(qlItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0)),
+      workerInputVat: round2(ql.reduce((s, i) => s + i.totalVat, 0)),
+      expenseInputVat: round2(qe.reduce((s, e) => s + e.vatAmount, 0)),
     }
   })
 
   return {
     clientName: clientRecord?.name ?? '',
     quarters,
-    annualGigOutputVat:   r2(quarters.reduce((s, q) => s + q.gigOutputVat, 0)),
-    annualSubsOutputVat:  r2(quarters.reduce((s, q) => s + q.subsOutputVat, 0)),
-    annualWorkerInputVat: r2(quarters.reduce((s, q) => s + q.workerInputVat, 0)),
-    annualExpenseInputVat: r2(quarters.reduce((s, q) => s + q.expenseInputVat, 0)),
+    annualGigOutputVat:   round2(quarters.reduce((s, q) => s + q.gigOutputVat, 0)),
+    annualSubsOutputVat:  round2(quarters.reduce((s, q) => s + q.subsOutputVat, 0)),
+    annualWorkerInputVat: round2(quarters.reduce((s, q) => s + q.workerInputVat, 0)),
+    annualExpenseInputVat: round2(quarters.reduce((s, q) => s + q.expenseInputVat, 0)),
   }
 }

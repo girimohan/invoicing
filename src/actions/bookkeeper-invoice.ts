@@ -2,12 +2,15 @@
 
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
+import { round2, getQuarter } from '@/lib/calculations'
 
 export type BookkeeperInvoiceInput = {
   invoiceNumber: string
   issueDate: string   // ISO date string YYYY-MM-DD
   dueDate: string
   paymentTerms: string
+  periodStart: string  // service period, independent of issueDate
+  periodEnd: string
 
   bkName: string
   bkBusinessId: string
@@ -45,6 +48,8 @@ export async function createBookkeeperInvoice(data: BookkeeperInvoiceInput) {
       issueDate: new Date(data.issueDate),
       dueDate: new Date(data.dueDate),
       paymentTerms: data.paymentTerms,
+      periodStart: new Date(data.periodStart),
+      periodEnd: new Date(data.periodEnd),
       bkName: data.bkName,
       bkBusinessId: data.bkBusinessId,
       bkVatId: data.bkVatId,
@@ -93,6 +98,8 @@ export async function updateBookkeeperInvoice(id: string, data: BookkeeperInvoic
       issueDate: new Date(data.issueDate),
       dueDate: new Date(data.dueDate),
       paymentTerms: data.paymentTerms,
+      periodStart: new Date(data.periodStart),
+      periodEnd: new Date(data.periodEnd),
       bkName: data.bkName,
       bkBusinessId: data.bkBusinessId,
       bkVatId: data.bkVatId,
@@ -150,6 +157,8 @@ export interface BkVatQuarter {
     id: string
     invoiceNumber: string
     issueDate: Date
+    periodStart: Date
+    periodEnd: Date
     clientName: string
     amountExVat: number
     vatRate: number
@@ -165,35 +174,33 @@ export async function getBookkeeperVatSummary(year: number) {
   const yearStart = new Date(`${year}-01-01`)
   const yearEnd   = new Date(`${year + 1}-01-01`)
 
+  // VAT quarter is determined by the service period end date, not issueDate —
+  // matches client-invoice VAT allocation (see getGigVatSummary).
   const invoices = await db.bookkeeperInvoice.findMany({
-    where: { issueDate: { gte: yearStart, lt: yearEnd } },
-    orderBy: { issueDate: 'asc' },
+    where: { periodEnd: { gte: yearStart, lt: yearEnd } },
+    orderBy: { periodEnd: 'asc' },
     select: {
-      id: true, invoiceNumber: true, issueDate: true,
+      id: true, invoiceNumber: true, issueDate: true, periodStart: true, periodEnd: true,
       clientName: true, amountExVat: true, vatRate: true, vatAmount: true, totalIncVat: true,
     },
   })
 
-  const r2 = (n: number) => Math.round(n * 100) / 100
   const quarters: BkVatQuarter[] = [1, 2, 3, 4].map((q) => {
-    const qInvoices = invoices.filter((i) => {
-      const m = new Date(i.issueDate).getMonth()
-      return Math.floor(m / 3) + 1 === q
-    })
+    const qInvoices = invoices.filter((i) => getQuarter(i.periodEnd) === q)
     return {
       quarter: q,
       invoices: qInvoices,
-      totalExVat: r2(qInvoices.reduce((s, i) => s + i.amountExVat, 0)),
-      totalVat:   r2(qInvoices.reduce((s, i) => s + i.vatAmount, 0)),
-      totalIncVat: r2(qInvoices.reduce((s, i) => s + i.totalIncVat, 0)),
+      totalExVat: round2(qInvoices.reduce((s, i) => s + i.amountExVat, 0)),
+      totalVat:   round2(qInvoices.reduce((s, i) => s + i.vatAmount, 0)),
+      totalIncVat: round2(qInvoices.reduce((s, i) => s + i.totalIncVat, 0)),
     }
   })
 
   return {
     quarters,
-    annualExVat:  r2(invoices.reduce((s, i) => s + i.amountExVat, 0)),
-    annualVat:    r2(invoices.reduce((s, i) => s + i.vatAmount, 0)),
-    annualIncVat: r2(invoices.reduce((s, i) => s + i.totalIncVat, 0)),
+    annualExVat:  round2(invoices.reduce((s, i) => s + i.amountExVat, 0)),
+    annualVat:    round2(invoices.reduce((s, i) => s + i.vatAmount, 0)),
+    annualIncVat: round2(invoices.reduce((s, i) => s + i.totalIncVat, 0)),
     invoiceCount: invoices.length,
   }
 }

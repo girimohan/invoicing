@@ -1,6 +1,6 @@
 import type { Calculated, LineItemRow, VatBreakdown } from '@/types/invoice'
 
-function round2(n: number): number {
+export function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
@@ -73,4 +73,9 @@ export function formatDateFromDate(date: Date): string {
 export function formatIban(iban: string): string {
   const clean = iban.replace(/\s/g, '')
   return clean.match(/.{1,4}/g)?.join(' ') ?? iban
+}
+
+// VAT quarter (1-4) for a given date — Finnish VAT filing is quarterly.
+export function getQuarter(d: Date | string): number {
+  return Math.floor(new Date(d).getMonth() / 3) + 1
 }

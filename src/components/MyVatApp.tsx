@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { BkVatQuarter } from '@/actions/bookkeeper-invoice'
 import type { GigVatQuarter } from '@/actions/owner-books'
+import { round2, formatCurrency as fmt } from '@/lib/calculations'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -30,9 +31,6 @@ type Props = {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function fmt(n: number) { return n.toFixed(2) }
-function r2(n: number) { return Math.round(n * 100) / 100 }
 
 function fmtDate(d: Date | string) {
   return new Date(d).toLocaleDateString('fi-FI', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -85,14 +83,14 @@ export default function MyVatApp({
     const gig = gigQuarters?.find(x => x.quarter === q)
     const bkVat      = bk?.totalVat ?? 0
     const gigOut     = (gig?.gigOutputVat ?? 0) + (gig?.subsOutputVat ?? 0)
-    const totalOut   = r2(bkVat + gigOut)
-    const totalIn    = r2((gig?.workerInputVat ?? 0) + (gig?.expenseInputVat ?? 0))
-    return { bkVat, gigOut, totalOut, totalIn, net: r2(totalOut - totalIn) }
+    const totalOut   = round2(bkVat + gigOut)
+    const totalIn    = round2((gig?.workerInputVat ?? 0) + (gig?.expenseInputVat ?? 0))
+    return { bkVat, gigOut, totalOut, totalIn, net: round2(totalOut - totalIn) }
   }
 
-  const annualTotalOut = r2(bkAnnualVat + gigAnnualOutputVat + gigAnnualSubsOutputVat)
-  const annualTotalIn  = r2(gigAnnualWorkerInputVat + gigAnnualExpenseInputVat)
-  const annualNet      = r2(annualTotalOut - annualTotalIn)
+  const annualTotalOut = round2(bkAnnualVat + gigAnnualOutputVat + gigAnnualSubsOutputVat)
+  const annualTotalIn  = round2(gigAnnualWorkerInputVat + gigAnnualExpenseInputVat)
+  const annualNet      = round2(annualTotalOut - annualTotalIn)
   const hasGig = gigQuarters !== null
 
   return (
@@ -154,7 +152,7 @@ export default function MyVatApp({
             <div className="bg-white border border-gray-200 rounded-xl p-4">
               <div className="text-[10px] text-gray-400 mb-1 font-medium uppercase tracking-wide">Total Output VAT</div>
               <div className="text-xl font-bold text-orange-600 font-mono">{fmt(annualTotalOut)} EUR</div>
-              <div className="text-[10px] text-gray-400 mt-1">BK {fmt(bkAnnualVat)} + Gig {fmt(r2(gigAnnualOutputVat + gigAnnualSubsOutputVat))}</div>
+              <div className="text-[10px] text-gray-400 mt-1">BK {fmt(bkAnnualVat)} + Gig {fmt(round2(gigAnnualOutputVat + gigAnnualSubsOutputVat))}</div>
             </div>
             <div className="bg-white border border-gray-200 rounded-xl p-4">
               <div className="text-[10px] text-gray-400 mb-1 font-medium uppercase tracking-wide">Total Input VAT</div>
@@ -242,7 +240,7 @@ export default function MyVatApp({
               <tr>
                 <td className="px-5 py-3 font-bold text-gray-700">Annual Total</td>
                 <td className="px-4 py-3 text-right font-bold font-mono text-teal-700">{fmt(bkAnnualVat)}</td>
-                {hasGig && <td className="px-4 py-3 text-right font-bold font-mono text-indigo-600">{fmt(r2(gigAnnualOutputVat + gigAnnualSubsOutputVat))}</td>}
+                {hasGig && <td className="px-4 py-3 text-right font-bold font-mono text-indigo-600">{fmt(round2(gigAnnualOutputVat + gigAnnualSubsOutputVat))}</td>}
                 <td className="px-4 py-3 text-right font-bold font-mono text-orange-700 text-base">{fmt(annualTotalOut)}</td>
                 {hasGig && <td className="px-4 py-3 text-right font-bold font-mono text-red-600">{fmt(annualTotalIn)}</td>}
                 <td className={`px-5 py-3 text-right font-bold font-mono text-lg ${annualNet >= 0 ? 'text-blue-700' : 'text-green-600'}`}>{fmt(Math.abs(annualNet))} EUR</td>
@@ -340,7 +338,7 @@ export default function MyVatApp({
           </ol>
           <div className="bg-white border border-blue-100 rounded-lg p-3 font-mono text-[11px]">
             <strong>Your {year} summary:</strong><br />
-            Output VAT = BK fees {fmt(bkAnnualVat)} EUR{hasGig ? ` + gig/subs ${fmt(r2(gigAnnualOutputVat + gigAnnualSubsOutputVat))} EUR = ${fmt(annualTotalOut)} EUR` : ''}<br />
+            Output VAT = BK fees {fmt(bkAnnualVat)} EUR{hasGig ? ` + gig/subs ${fmt(round2(gigAnnualOutputVat + gigAnnualSubsOutputVat))} EUR = ${fmt(annualTotalOut)} EUR` : ''}<br />
             {hasGig && <>Input VAT = {fmt(annualTotalIn)} EUR<br /></>}
             <strong>Net payable = {fmt(Math.abs(annualNet))} EUR{annualNet < 0 ? ' (refund)' : ''}</strong>
           </div>

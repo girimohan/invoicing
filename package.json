@@ -21,7 +21,9 @@
     "moduleNameMapper": {
       "^@/(.*)$": "<rootDir>/src/$1"
     },
-    "testMatch": ["**/*.test.ts"]
+    "testMatch": [
+      "**/*.test.ts"
+    ]
   },
   "build": {
     "appId": "com.barmo.bookkeeping",
@@ -41,8 +43,17 @@
         "to": "prisma",
         "filter": [
           "schema.prisma",
-          "seed.db"
+          "seed.db",
+          "migrations/**/*"
         ]
+      },
+      {
+        "from": "node_modules/prisma",
+        "to": "prisma-cli/node_modules/prisma"
+      },
+      {
+        "from": "node_modules/@prisma",
+        "to": "prisma-cli/node_modules/@prisma"
       }
     ],
     "win": {
@@ -64,6 +75,7 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
@@ -82,7 +94,6 @@
   "dependencies": {
     "@prisma/client": "^5.16.0",
     "@react-pdf/renderer": "^3.4.4",
-    "date-fns": "^3.6.0",
     "next": "^14.2.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"

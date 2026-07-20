@@ -1,6 +1,6 @@
 const { app, BrowserWindow, shell } = require('electron')
 const path = require('path')
-const { spawn } = require('child_process')
+const { spawn, spawnSync } = require('child_process')
 const { existsSync, copyFileSync, mkdirSync, statSync } = require('fs')
 const http = require('http')
 const net = require('net')
@@ -53,6 +53,53 @@ function initDatabase() {
   return dbDest
 }
 
+// ── Bring an existing user's database up to date ─────────────────────────────
+// initDatabase() only SEEDS a fresh DB. Users upgrading from an older version
+// keep their existing dev.db, which has an older schema. Without this step,
+// new code querying new tables/columns throws "table does not exist" (P2021)
+// and Next.js surfaces it as an opaque "Server Components render error".
+// `prisma migrate deploy` is idempotent — a no-op when already up to date —
+// and applies only the missing migrations to the user's real data in place.
+function runMigrations(dbPath) {
+  if (isDev) return // dev uses `npm run db:push` manually
+
+  const cliRoot    = path.join(process.resourcesPath, 'prisma-cli', 'node_modules')
+  const prismaCli  = path.join(cliRoot, 'prisma', 'build', 'index.js')
+  const schemaPath = path.join(process.resourcesPath, 'prisma', 'schema.prisma')
+  const engineName =
+    process.platform === 'win32'  ? 'schema-engine-windows.exe' :
+    process.platform === 'darwin' ? 'schema-engine-darwin' :
+                                    'schema-engine-debian-openssl-3.0.x'
+  const schemaEngine = path.join(cliRoot, '@prisma', 'engines', engineName)
+
+  if (!existsSync(prismaCli) || !existsSync(schemaPath)) {
+    console.warn('Prisma CLI or schema not bundled — skipping migrations.')
+    return
+  }
+
+  const env = {
+    ...process.env,
+    // Run the Electron binary as plain Node so it executes the prisma CLI.
+    ELECTRON_RUN_AS_NODE: '1',
+    DATABASE_URL: `file:${dbPath}`,
+    CHECKPOINT_DISABLE: '1', // no telemetry / update checks
+  }
+  // Point Prisma at the bundled schema engine so it never tries to download one.
+  if (existsSync(schemaEngine)) env.PRISMA_SCHEMA_ENGINE_BINARY = schemaEngine
+
+  const result = spawnSync(
+    process.execPath,
+    [prismaCli, 'migrate', 'deploy', '--schema', schemaPath],
+    { env, encoding: 'utf8' }
+  )
+
+  if (result.status === 0) {
+    console.log('Database migrations up to date.')
+  } else {
+    console.error('Prisma migrate deploy failed:', result.stdout, result.stderr)
+  }
+}
+
 // ── Find a free TCP port starting from `start` ───────────────────────────────
 function getFreePort(start = 3847) {
   return new Promise((resolve, reject) => {
@@ -88,6 +135,7 @@ async function startNextServer() {
   if (isDev) return
 
   const dbPath = initDatabase()
+  runMigrations(dbPath)
   const port = await getFreePort(3847)
   activePort = port
 

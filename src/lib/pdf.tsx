@@ -9,7 +9,7 @@ import {
 } from '@react-pdf/renderer'
 import type { Prisma } from '@prisma/client'
 import { numberToWords } from './numberToWords'
-import { formatIban, formatDateFromDate } from './calculations'
+import { formatIban, formatDateFromDate, formatCurrency as fmt } from './calculations'
 
 type InvoiceWithItems = Prisma.InvoiceGetPayload<{
   include: { lineItems: true; reference: true }
@@ -194,10 +194,6 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
   },
 } as unknown as Styles)
-
-function fmt(n: number): string {
-  return n.toFixed(2)
-}
 
 export function InvoicePDF({ invoice }: { invoice: InvoiceWithItems }) {
   // Build VAT breakdown from line items

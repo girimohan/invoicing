@@ -60,6 +60,13 @@ model Invoice {
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@index([invoiceDate])
+  @@index([periodEnd])
+  @@index([clientId])
+  @@index([buyerClientId])
+  @@index([sellerBusinessId])
+  @@index([buyerBusinessId])
 }
 
 // ── Invoice Reference Number (Viitenumero) ───────────────────────────────────
@@ -124,6 +131,8 @@ model OwnerIncomePeriod {
   notes          String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  @@index([periodStart])
 }
 
 // ── Owner business expense entry ─────────────────────────────────────────────
@@ -147,6 +156,8 @@ model OwnerExpense {
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([date])
 }
 
 model BookkeeperInvoice {
@@ -155,6 +166,8 @@ model BookkeeperInvoice {
   issueDate       DateTime
   dueDate         DateTime
   paymentTerms    String   @default("14 pv netto / 14 days net")
+  periodStart     DateTime
+  periodEnd       DateTime
 
   // Bookkeeper (seller) details
   bkName          String
@@ -189,6 +202,11 @@ model BookkeeperInvoice {
 
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+
+  @@index([periodEnd])
+  @@index([issueDate])
+  @@index([clientId])
+  @@index([bkBusinessId])
 }
 
 model LineItem {

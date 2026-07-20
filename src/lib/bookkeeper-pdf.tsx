@@ -8,7 +8,7 @@ import {
   type Styles,
 } from '@react-pdf/renderer'
 import type { BookkeeperInvoice } from '@prisma/client'
-import { formatIban } from './calculations'
+import { formatIban, formatCurrency as fmt } from './calculations'
 
 const s = StyleSheet.create({
   page: {
@@ -142,8 +142,6 @@ const s = StyleSheet.create({
   },
 } as unknown as Styles)
 
-function fmt(n: number) { return n.toFixed(2) }
-
 function fmtDate(d: Date) {
   return new Date(d).toLocaleDateString('fi-FI', {
     day: '2-digit', month: '2-digit', year: 'numeric',
@@ -187,6 +185,12 @@ export function BookkeeperInvoicePDF({ invoice }: { invoice: BookkeeperInvoice }
             <View style={s.detailRow}>
               <Text style={s.detailLabel}>Maksuehto / Payment Terms:</Text>
               <Text style={s.detailValue}>{invoice.paymentTerms}</Text>
+            </View>
+            <View style={s.detailRow}>
+              <Text style={s.detailLabel}>Laskutuskausi / Billing Period:</Text>
+              <Text style={s.detailValue}>
+                {fmtDate(invoice.periodStart)} – {fmtDate(invoice.periodEnd)}
+              </Text>
             </View>
           </View>
         </View>

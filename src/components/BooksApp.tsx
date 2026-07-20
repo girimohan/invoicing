@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useState, useEffect, useTransition, useCallback } from 'react'
+import { useState, useEffect, useTransition, useCallback, useMemo } from 'react'
 import VehicleTab from '@/components/VehicleTab'
 import {
   getOwnerBooks,
@@ -9,6 +9,7 @@ import {
   createOwnerExpense,
   deleteOwnerExpense,
 } from '@/actions/owner-books'
+import { round2, getQuarter, formatCurrency as fmt } from '@/lib/calculations'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,7 @@ type LinkedInvoice = {
   id: string
   invoiceNumber: string
   invoiceDate: Date
+  periodEnd: Date       // service period end — used for VAT quarter assignment
   sellerName: string
   buyerName: string
   totalExVat: number
@@ -65,6 +67,7 @@ type BookkeeperInvoice = {
   id: string
   invoiceNumber: string
   issueDate: Date
+  periodEnd: Date
   clientName: string
   amountExVat: number
   vatRate: number
@@ -95,14 +98,10 @@ const CAT_LABEL: Record<string, string> = Object.fromEntries(
 )
 
 function todayIso() { return new Date().toISOString().split('T')[0] }
-function fmt(n: number) { return n.toFixed(2) }
-function r2(n: number) { return Math.round(n * 100) / 100 }
 
 function fmtDate(d: Date) {
   return new Date(d).toLocaleDateString('fi-FI', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
-
-function getQuarter(d: Date) { return Math.floor(new Date(d).getMonth() / 3) + 1 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -116,11 +115,12 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
   const [linkedInvoices, setLinkedInvoices] = useState<LinkedInvoice[]>([])
   const [sellerInvoices, setSellerInvoices] = useState<LinkedInvoice[]>([])
   const [bookkeeperInvoices, setBookkeeperInvoices] = useState<BookkeeperInvoice[]>([])
-  const [receivedBkInvoices, setReceivedBkInvoices] = useState<{ id: string; invoiceNumber: string; issueDate: Date; amountExVat: number; vatRate: number; vatAmount: number; totalIncVat: number }[]>([])
+  const [receivedBkInvoices, setReceivedBkInvoices] = useState<{ id: string; invoiceNumber: string; issueDate: Date; periodEnd: Date; amountExVat: number; vatRate: number; vatAmount: number; totalIncVat: number }[]>([])
   const [showAddIncome, setShowAddIncome] = useState(false)
   const [showAddExpense, setShowAddExpense] = useState(false)
   const [expandWorkerInvoices, setExpandWorkerInvoices] = useState(false)
   const [isPending, startTransition] = useTransition()
+  const [error, setError] = useState<string | null>(null)
 
   const [incomeForm, setIncomeForm] = useState({
     periodStart: '', periodEnd: '', woltInvoiceRef: '', description: '',
@@ -155,83 +155,85 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
   // ── Substitute-period income calculations (account holder only) ───────────
   // earnedAmount = full Wolt gross; amountExVat = worker's share; owner cut = gross - worker
   const allLinkedItems = linkedInvoices.flatMap(i => i.lineItems)
-  const woltGrossFromSubstitutes = r2(allLinkedItems.reduce((s, li) => s + li.earnedAmount, 0))
-  const ownerCutExVat            = r2(allLinkedItems.reduce((s, li) => s + (li.earnedAmount - li.amountExVat), 0))
-  const ownerCutVat              = r2(allLinkedItems.reduce((s, li) => s + (li.earnedAmount - li.amountExVat) * li.vatRate / 100, 0))
-  const woltOutputVatFromSubs    = r2(allLinkedItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0))
-  const workerCostExVat          = r2(linkedInvoices.reduce((s, i) => s + i.totalExVat, 0))
-  const workerCostVat            = r2(linkedInvoices.reduce((s, i) => s + i.totalVat, 0))
+  const woltGrossFromSubstitutes = round2(allLinkedItems.reduce((s, li) => s + li.earnedAmount, 0))
+  const ownerCutExVat            = round2(allLinkedItems.reduce((s, li) => s + (li.earnedAmount - li.amountExVat), 0))
+  const ownerCutVat              = round2(allLinkedItems.reduce((s, li) => s + (li.earnedAmount - li.amountExVat) * li.vatRate / 100, 0))
+  const woltOutputVatFromSubs    = round2(allLinkedItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0))
+  const workerCostExVat          = round2(linkedInvoices.reduce((s, i) => s + i.totalExVat, 0))
+  const workerCostVat            = round2(linkedInvoices.reduce((s, i) => s + i.totalVat, 0))
 
   // ── Bookkeeper invoice income (Mohan's bookkeeping fees to clients) ───────────────────
-  const bkIncomeExVat = r2(bookkeeperInvoices.reduce((s, i) => s + i.amountExVat, 0))
-  const bkIncomeVat   = r2(bookkeeperInvoices.reduce((s, i) => s + i.vatAmount, 0))
+  const bkIncomeExVat = round2(bookkeeperInvoices.reduce((s, i) => s + i.amountExVat, 0))
+  const bkIncomeVat   = round2(bookkeeperInvoices.reduce((s, i) => s + i.vatAmount, 0))
 
   // ── Manual own-work income (account holders, periods they personally delivered) ──
-  const totalIncomeExVat  = r2(incomes.reduce((s, i) => s + i.totalExVat, 0))
-  const totalIncomeTips   = r2(incomes.reduce((s, i) => s + (i.tipsExVat ?? 0), 0))
-  const totalIncomeVat    = r2(incomes.reduce((s, i) => s + i.vatAmount, 0))
+  const totalIncomeExVat  = round2(incomes.reduce((s, i) => s + i.totalExVat, 0))
+  const totalIncomeTips   = round2(incomes.reduce((s, i) => s + (i.tipsExVat ?? 0), 0))
+  const totalIncomeVat    = round2(incomes.reduce((s, i) => s + i.vatAmount, 0))
   // totalIncVat already includes tips (stored correctly in DB)
-  const totalIncomeGross  = r2(incomes.reduce((s, i) => s + i.totalIncVat, 0))
+  const totalIncomeGross  = round2(incomes.reduce((s, i) => s + i.totalIncVat, 0))
 
   // ── Substitute worker invoice income ──────────────────────────────────────
-  const sellerIncomeExVat = r2(sellerInvoices.reduce((s, i) => s + i.totalExVat, 0))
-  const sellerIncomeVat   = r2(sellerInvoices.reduce((s, i) => s + i.totalVat, 0))
+  const sellerIncomeExVat = round2(sellerInvoices.reduce((s, i) => s + i.totalExVat, 0))
+  const sellerIncomeVat   = round2(sellerInvoices.reduce((s, i) => s + i.totalVat, 0))
 
-  const otherExpExVat = r2(expenses.reduce((s, e) => s + e.amountExVat, 0))
-  const otherExpVat   = r2(expenses.reduce((s, e) => s + e.vatAmount, 0))
+  const otherExpExVat = round2(expenses.reduce((s, e) => s + e.amountExVat, 0))
+  const otherExpVat   = round2(expenses.reduce((s, e) => s + e.vatAmount, 0))
 
   // incomeExVat: account holder = own Wolt fees + tips + net owner cut + bookkeeping fees
   //              substitute     = invoice income
   // ownerCutExVat already NETS out the worker payment, so NO double subtraction
   const incomeExVat = isAccountHolder
-    ? r2(totalIncomeExVat + totalIncomeTips + ownerCutExVat + bkIncomeExVat)
+    ? round2(totalIncomeExVat + totalIncomeTips + ownerCutExVat + bkIncomeExVat)
     : sellerIncomeExVat
 
-  const netProfit = r2(incomeExVat - otherExpExVat)
+  const netProfit = round2(incomeExVat - otherExpExVat)
 
   // ── Bookkeeper fees received by this client (their INPUT VAT, deductible) ──
-  const clientBkFeeInputVat = r2(receivedBkInvoices.reduce((s, i) => s + i.vatAmount, 0))
+  const clientBkFeeInputVat = round2(receivedBkInvoices.reduce((s, i) => s + i.vatAmount, 0))
 
   // VAT filing:
   // Account holder output = VAT on own Wolt income + VAT on FULL Wolt gross for sub periods + bookkeeping VAT (if this client IS the bookkeeper)
   //           input  = worker invoice VAT + bookkeeper fee paid VAT (deductible) + other expense VAT
   const filingOutputVat = isAccountHolder
-    ? r2(totalIncomeVat + woltOutputVatFromSubs + bkIncomeVat)
+    ? round2(totalIncomeVat + woltOutputVatFromSubs + bkIncomeVat)
     : sellerIncomeVat
   const filingInputVat = isAccountHolder
-    ? r2(workerCostVat + clientBkFeeInputVat + otherExpVat)
-    : r2(clientBkFeeInputVat + otherExpVat)
-  const netVatPayable = r2(filingOutputVat - filingInputVat)
+    ? round2(workerCostVat + clientBkFeeInputVat + otherExpVat)
+    : round2(clientBkFeeInputVat + otherExpVat)
+  const netVatPayable = round2(filingOutputVat - filingInputVat)
 
-  function quarterData(q: number) {
+  const quarters = useMemo(() => [1, 2, 3, 4].map((q) => {
     const qi = incomes.filter(i => getQuarter(i.periodStart) === q)
-    const ql = linkedInvoices.filter(i => getQuarter(i.invoiceDate) === q)
-    const qs = sellerInvoices.filter(i => getQuarter(i.invoiceDate) === q)
+    // Use periodEnd (service period) not invoiceDate — a June 15-30 job invoiced in July is Q2 VAT
+    const ql = linkedInvoices.filter(i => getQuarter(i.periodEnd) === q)
+    const qs = sellerInvoices.filter(i => getQuarter(i.periodEnd) === q)
     const qe = expenses.filter(e => getQuarter(e.date) === q)
-    const qbk = bookkeeperInvoices.filter(i => getQuarter(i.issueDate) === q)
-    const qRecBk = receivedBkInvoices.filter(i => getQuarter(i.issueDate) === q)
+    // Use periodEnd (service period) for BK invoices too, consistent with client invoices
+    const qbk = bookkeeperInvoices.filter(i => getQuarter(i.periodEnd) === q)
+    const qRecBk = receivedBkInvoices.filter(i => getQuarter(i.periodEnd) === q)
     const qlItems = ql.flatMap(i => i.lineItems)
     if (isAccountHolder) {
-      const outVatOwn  = r2(qi.reduce((s, i) => s + i.vatAmount, 0))
-      const outVatSubs = r2(qlItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0))
-      const outVatBk   = r2(qbk.reduce((s, i) => s + i.vatAmount, 0))
-      const outVat     = r2(outVatOwn + outVatSubs + outVatBk)
-      const inVatW     = r2(ql.reduce((s, i) => s + i.totalVat, 0))
-      const inVatBkFee = r2(qRecBk.reduce((s, i) => s + i.vatAmount, 0))
-      const inVatE     = r2(qe.reduce((s, e) => s + e.vatAmount, 0))
-      return { outVat, outVatOwn, outVatSubs, outVatBk, inVatW, inVatBkFee, inVatE, net: r2(outVat - inVatW - inVatBkFee - inVatE) }
+      const outVatOwn  = round2(qi.reduce((s, i) => s + i.vatAmount, 0))
+      const outVatSubs = round2(qlItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0))
+      const outVatBk   = round2(qbk.reduce((s, i) => s + i.vatAmount, 0))
+      const outVat     = round2(outVatOwn + outVatSubs + outVatBk)
+      const inVatW     = round2(ql.reduce((s, i) => s + i.totalVat, 0))
+      const inVatBkFee = round2(qRecBk.reduce((s, i) => s + i.vatAmount, 0))
+      const inVatE     = round2(qe.reduce((s, e) => s + e.vatAmount, 0))
+      return { q, outVat, outVatOwn, outVatSubs, outVatBk, inVatW, inVatBkFee, inVatE, net: round2(outVat - inVatW - inVatBkFee - inVatE) }
     } else {
-      const outVat    = r2(qs.reduce((s, i) => s + i.totalVat, 0))
-      const inVatBkFee = r2(qRecBk.reduce((s, i) => s + i.vatAmount, 0))
-      const inVatE    = r2(qe.reduce((s, e) => s + e.vatAmount, 0))
-      return { outVat, outVatOwn: 0, outVatSubs: 0, outVatBk: 0, inVatW: 0, inVatBkFee, inVatE, net: r2(outVat - inVatBkFee - inVatE) }
+      const outVat    = round2(qs.reduce((s, i) => s + i.totalVat, 0))
+      const inVatBkFee = round2(qRecBk.reduce((s, i) => s + i.vatAmount, 0))
+      const inVatE    = round2(qe.reduce((s, e) => s + e.vatAmount, 0))
+      return { q, outVat, outVatOwn: 0, outVatSubs: 0, outVatBk: 0, inVatW: 0, inVatBkFee, inVatE, net: round2(outVat - inVatBkFee - inVatE) }
     }
-  }
+  }), [incomes, linkedInvoices, sellerInvoices, expenses, bookkeeperInvoices, receivedBkInvoices, isAccountHolder])
 
-  const expByCategory = EXPENSE_CATEGORIES.map((cat) => {
+  const expByCategory = useMemo(() => EXPENSE_CATEGORIES.map((cat) => {
     const rows = expenses.filter((e) => e.category === cat.value)
-    return { ...cat, rows, total: r2(rows.reduce((s, e) => s + e.amountExVat, 0)) }
-  }).filter((c) => c.rows.length > 0)
+    return { ...cat, rows, total: round2(rows.reduce((s, e) => s + e.amountExVat, 0)) }
+  }).filter((c) => c.rows.length > 0), [expenses])
 
   const handleSaveIncome = useCallback(() => {
     if (!selectedClientId || !incomeForm.periodStart || !incomeForm.periodEnd || !incomeForm.totalExVat) return
@@ -257,9 +259,14 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
 
   const handleDeleteIncome = useCallback((id: string) => {
     if (!confirm('Delete this income period?')) return
+    setError(null)
     startTransition(async () => {
-      await deleteOwnerIncomePeriod(id)
-      setIncomes((prev) => prev.filter((i) => i.id !== id))
+      try {
+        await deleteOwnerIncomePeriod(id)
+        setIncomes((prev) => prev.filter((i) => i.id !== id))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to delete income period.')
+      }
     })
   }, [])
 
@@ -287,9 +294,14 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
 
   const handleDeleteExpense = useCallback((id: string) => {
     if (!confirm('Delete this expense?')) return
+    setError(null)
     startTransition(async () => {
-      await deleteOwnerExpense(id)
-      setExpenses((prev) => prev.filter((e) => e.id !== id))
+      try {
+        await deleteOwnerExpense(id)
+        setExpenses((prev) => prev.filter((e) => e.id !== id))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to delete expense.')
+      }
     })
   }, [])
 
@@ -321,6 +333,14 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
           ))}
         </div>
       </div>
+
+      {error && (
+        <div className="max-w-5xl mx-auto mt-4 px-6">
+          <div className="text-xs bg-red-50 border border-red-200 text-red-700 rounded px-3 py-2">
+            {error}
+          </div>
+        </div>
+      )}
 
       {/* ── No client selected: overview grid ── */}
       {selectedClientId === null && (
@@ -491,11 +511,11 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                     </thead>
                     <tbody>
                       {linkedInvoices.map((inv, idx) => {
-                        const gross   = r2(inv.lineItems.reduce((s, li) => s + li.earnedAmount, 0))
+                        const gross   = round2(inv.lineItems.reduce((s, li) => s + li.earnedAmount, 0))
                         const paid    = inv.totalExVat
-                        const cut     = r2(gross - paid)
+                        const cut     = round2(gross - paid)
                         const shItems = inv.lineItems.filter(li => li.sharePercent < 100)
-                        const shGross = r2(shItems.reduce((s, li) => s + li.earnedAmount, 0))
+                        const shGross = round2(shItems.reduce((s, li) => s + li.earnedAmount, 0))
                         const avgSh   = shGross > 0
                           ? Math.round(shItems.reduce((s, li) => s + li.sharePercent * li.earnedAmount, 0) / shGross)
                           : Math.round(inv.lineItems[0]?.sharePercent ?? 0)
@@ -742,9 +762,9 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                     </thead>
                     <tbody>
                       {sellerInvoices.map((inv, idx) => {
-                        const gross  = r2(inv.lineItems.reduce((s, li) => s + li.earnedAmount, 0))
+                        const gross  = round2(inv.lineItems.reduce((s, li) => s + li.earnedAmount, 0))
                         const shItems = inv.lineItems.filter(li => li.sharePercent < 100)
-                        const shGross = r2(shItems.reduce((s, li) => s + li.earnedAmount, 0))
+                        const shGross = round2(shItems.reduce((s, li) => s + li.earnedAmount, 0))
                         const avgSh  = shGross > 0
                           ? Math.round(shItems.reduce((s, li) => s + li.sharePercent * li.earnedAmount, 0) / shGross)
                           : Math.round(inv.lineItems[0]?.sharePercent ?? 0)
@@ -822,9 +842,9 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                         </thead>
                         <tbody>
                           {linkedInvoices.map((inv, idx) => {
-                            const gross = r2(inv.lineItems.reduce((s, li) => s + li.earnedAmount, 0))
+                            const gross = round2(inv.lineItems.reduce((s, li) => s + li.earnedAmount, 0))
                             const shItems = inv.lineItems.filter(li => li.sharePercent < 100)
-                            const shGross = r2(shItems.reduce((s, li) => s + li.earnedAmount, 0))
+                            const shGross = round2(shItems.reduce((s, li) => s + li.earnedAmount, 0))
                             const avgSh = shGross > 0
                               ? Math.round(shItems.reduce((s, li) => s + li.sharePercent * li.earnedAmount, 0) / shGross)
                               : Math.round(inv.lineItems[0]?.sharePercent ?? 0)
@@ -851,7 +871,7 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                             <td colSpan={5} className="px-4 py-2 text-xs font-bold text-orange-700">Total paid to workers</td>
                             <td className="px-4 py-2 text-right font-bold font-mono text-orange-700">{fmt(workerCostExVat)}</td>
                             <td className="px-4 py-2 text-right font-bold font-mono text-orange-600">{fmt(workerCostVat)}</td>
-                            <td className="px-4 py-2 text-right font-bold font-mono text-orange-700">{fmt(r2(workerCostExVat + workerCostVat))}</td>
+                            <td className="px-4 py-2 text-right font-bold font-mono text-orange-700">{fmt(round2(workerCostExVat + workerCostVat))}</td>
                           </tr>
                         </tfoot>
                       </table>
@@ -1069,8 +1089,7 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                       </tr>
                     </thead>
                     <tbody>
-                      {[1, 2, 3, 4].map((q) => {
-                        const d = quarterData(q)
+                      {quarters.map(({ q, ...d }) => {
                         const labels = ['Jan–Mar', 'Apr–Jun', 'Jul–Sep', 'Oct–Dec']
                         const active = d.outVat !== 0 || d.inVatW !== 0 || d.inVatE !== 0
                         return (
@@ -1113,8 +1132,7 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                       </tr>
                     </thead>
                     <tbody>
-                      {[1, 2, 3, 4].map((q) => {
-                        const d = quarterData(q)
+                      {quarters.map(({ q, ...d }) => {
                         const labels = ['Jan–Mar', 'Apr–Jun', 'Jul–Sep', 'Oct–Dec']
                         const active = d.outVat !== 0 || d.inVatE !== 0
                         return (

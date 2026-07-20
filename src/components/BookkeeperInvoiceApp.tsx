@@ -11,6 +11,7 @@ import {
   type BookkeeperInvoiceInput,
 } from '@/actions/bookkeeper-invoice'
 import type { BookkeeperInvoice } from '@prisma/client'
+import { round2, formatCurrency as fmt } from '@/lib/calculations'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -56,15 +57,21 @@ function addDays(dateStr: string, days: number) {
   return d.toISOString().split('T')[0]
 }
 
-function round2(n: number) { return Math.round(n * 100) / 100 }
+function firstDayOfMonth(dateStr: string) {
+  const d = new Date(dateStr)
+  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0]
+}
+
+function lastDayOfMonth(dateStr: string) {
+  const d = new Date(dateStr)
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0]
+}
 
 function fmtDate(d: string) {
   return new Date(d + 'T00:00:00').toLocaleDateString('fi-FI', {
     day: '2-digit', month: '2-digit', year: 'numeric',
   })
 }
-
-function fmt(n: number) { return n.toFixed(2) }
 
 function formatIbanDisplay(raw: string) {
   return raw.replace(/\s/g, '').replace(/(.{4})/g, '$1 ').trim()
@@ -89,6 +96,8 @@ export default function BookkeeperInvoiceApp({
   const [issueDate, setIssueDate] = useState(today())
   const [dueDate, setDueDate] = useState(addDays(today(), 14))
   const [paymentTerms, setPaymentTerms] = useState('14 pv netto / 14 days net')
+  const [periodStart, setPeriodStart] = useState(firstDayOfMonth(today()))
+  const [periodEnd, setPeriodEnd] = useState(lastDayOfMonth(today()))
   const [serviceDescription, setServiceDescription] = useState(
     'Kirjanpito- ja veroilmoituspalvelu / Bookkeeping & tax filing services'
   )
@@ -175,6 +184,9 @@ export default function BookkeeperInvoiceApp({
     if (!invoiceNumber.trim()) return 'Invoice number is required.'
     if (!issueDate) return 'Issue date is required.'
     if (!dueDate) return 'Due date is required.'
+    if (!periodStart) return 'Service period start is required.'
+    if (!periodEnd) return 'Service period end is required.'
+    if (periodEnd < periodStart) return 'Service period end must be on or after the start.'
     if (amtEx <= 0) return 'Amount must be greater than 0.'
     return null
   }
@@ -190,6 +202,8 @@ export default function BookkeeperInvoiceApp({
       issueDate,
       dueDate,
       paymentTerms,
+      periodStart,
+      periodEnd,
       bkName: bk.name,
       bkBusinessId: bk.businessId,
       bkVatId: bk.vatId,
@@ -255,6 +269,8 @@ export default function BookkeeperInvoiceApp({
     setIssueDate(new Date(inv.issueDate).toISOString().split('T')[0])
     setDueDate(new Date(inv.dueDate).toISOString().split('T')[0])
     setPaymentTerms(inv.paymentTerms)
+    setPeriodStart(new Date(inv.periodStart).toISOString().split('T')[0])
+    setPeriodEnd(new Date(inv.periodEnd).toISOString().split('T')[0])
     setServiceDescription(inv.serviceDescription)
     setAmountExVat(String(inv.amountExVat))
     setVatRate(String(inv.vatRate))
@@ -503,10 +519,20 @@ export default function BookkeeperInvoiceApp({
                   <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
                 </div>
               </div>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-4 gap-3 mb-3">
                 <div className="field col-span-4">
                   <label>Payment Terms</label>
                   <input value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-4 gap-3">
+                <div className="field">
+                  <label>Service Period Start</label>
+                  <input type="date" value={periodStart} onChange={(e) => setPeriodStart(e.target.value)} />
+                </div>
+                <div className="field">
+                  <label>Service Period End</label>
+                  <input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
                 </div>
               </div>
             </div>
@@ -601,6 +627,7 @@ export default function BookkeeperInvoiceApp({
                   <tr><td className="text-gray-400 pr-3">Päivämäärä / Date:</td><td className="font-bold">{fmtDate(issueDate)}</td></tr>
                   <tr><td className="text-gray-400 pr-3">Eräpäivä / Due Date:</td><td className="font-bold">{fmtDate(dueDate)}</td></tr>
                   <tr><td className="text-gray-400 pr-3">Maksuehto / Payment Terms:</td><td className="font-bold">{paymentTerms}</td></tr>
+                  <tr><td className="text-gray-400 pr-3">Laskutuskausi / Billing Period:</td><td className="font-bold">{fmtDate(periodStart)} – {fmtDate(periodEnd)}</td></tr>
                 </tbody>
               </table>
             </div>
