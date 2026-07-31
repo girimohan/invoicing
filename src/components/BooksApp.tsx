@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useState, useEffect, useTransition, useCallback, useMemo } from 'react'
+import { useState, useEffect, useTransition, useCallback, useMemo, Fragment } from 'react'
 import VehicleTab from '@/components/VehicleTab'
 import {
   getOwnerBooks,
@@ -8,74 +8,25 @@ import {
   deleteOwnerIncomePeriod,
   createOwnerExpense,
   deleteOwnerExpense,
+  getCapitalAssetHistory,
 } from '@/actions/owner-books'
-import { round2, getQuarter, formatCurrency as fmt } from '@/lib/calculations'
+import { round2, formatCurrency as fmt } from '@/lib/calculations'
+import {
+  computeMonths, computePeriods, MONTH_NAMES,
+  type IncomePeriod, type Expense, type LinkedInvoice, type BookkeeperInvoice,
+  type ReceivedBkInvoice, type VatFilingFrequency, type MonthVat, type VatPeriod,
+} from '@/lib/vat-report'
+import {
+  computeDepreciationSchedule, DEPRECIABLE_CATEGORIES, SMALL_ACQUISITION_THRESHOLD, DEPRECIATION_RATE,
+} from '@/lib/depreciation'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type Client = { id: number; displayId: string; name: string; role: string; invoiceCount?: number; buyerInvoiceCount?: number }
 
-type IncomePeriod = {
-  id: string
-  periodStart: Date
-  periodEnd: Date
-  description: string | null
-  woltInvoiceRef: string | null
-  totalExVat: number
-  tipsExVat: number
-  vatRate: number
-  vatAmount: number
-  totalIncVat: number
-  notes: string | null
-}
-
-type Expense = {
-  id: string
-  date: Date
-  description: string
-  supplier: string | null
-  category: string
-  amountExVat: number
-  vatRate: number
-  vatAmount: number
-  totalAmount: number
-  receiptRef: string | null
-}
-
-type LineItem = {
-  earnedAmount: number
-  sharePercent: number
-  vatRate: number
-  amountExVat: number
-  vatAmount: number
-}
-
-type LinkedInvoice = {
-  id: string
-  invoiceNumber: string
-  invoiceDate: Date
-  periodEnd: Date       // service period end — used for VAT quarter assignment
-  sellerName: string
-  buyerName: string
-  totalExVat: number
-  totalVat: number
-  totalIncVat: number
-  lineItems: LineItem[]
-}
-
-type BookkeeperInvoice = {
-  id: string
-  invoiceNumber: string
-  issueDate: Date
-  periodEnd: Date
-  clientName: string
-  amountExVat: number
-  vatRate: number
-  vatAmount: number
-  totalIncVat: number
-}
-
 type Tab = 'income' | 'expenses' | 'vat' | 'tax' | 'vehicle'
+
+const VAT_FREQ_STORAGE_KEY = 'books_vat_filing_freq'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -103,6 +54,189 @@ function fmtDate(d: Date) {
   return new Date(d).toLocaleDateString('fi-FI', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+// ─── VAT period/month row cells — shared by period rows and nested month rows ──
+
+function VatRowCells({ d, isAccountHolder, showSubs, showBk, showRecBk, muted }: {
+  d: { outVatOwn: number; outVatSubs: number; outVatBk: number; outVat: number; inVatW: number; inVatBkFee: number; inVatE: number; net: number }
+  isAccountHolder: boolean
+  showSubs: boolean
+  showBk: boolean
+  showRecBk: boolean
+  muted?: boolean
+}) {
+  const cls = (c: string) => `px-3 py-3 text-right font-mono ${muted ? 'text-gray-300' : c}`
+  const netCls = `px-3 py-3 text-right font-mono font-bold ${muted ? 'text-gray-300' : d.net >= 0 ? 'text-blue-700' : 'text-green-600'}`
+  if (isAccountHolder) {
+    return (
+      <>
+        <td className={cls('text-green-700')}>{fmt(d.outVatOwn)}</td>
+        {showSubs && <td className={cls('text-indigo-600')}>{fmt(d.outVatSubs)}</td>}
+        {showBk && <td className={cls('text-teal-700')}>{fmt(d.outVatBk)}</td>}
+        <td className={cls('font-bold text-green-800')}>{fmt(d.outVat)}</td>
+        {showSubs && <td className={cls('text-orange-600')}>{fmt(d.inVatW)}</td>}
+        {showRecBk && <td className={cls('text-purple-600')}>{fmt(d.inVatBkFee)}</td>}
+        <td className={cls('text-red-600')}>{fmt(d.inVatE)}</td>
+        <td className={netCls}>{fmt(d.net)}</td>
+      </>
+    )
+  }
+  return (
+    <>
+      <td className={cls('text-purple-700')}>{fmt(d.outVat)}</td>
+      {showRecBk && <td className={cls('text-purple-600')}>{fmt(d.inVatBkFee)}</td>}
+      <td className={cls('text-red-600')}>{fmt(d.inVatE)}</td>
+      <td className={netCls}>{fmt(d.net)}</td>
+    </>
+  )
+}
+
+// ─── Itemized source records behind a month's VAT numbers ──────────────────────
+
+function ItemSection({ title, colorClass, children }: { title: string; colorClass: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className={`text-[10px] font-bold uppercase tracking-wide mb-1 ${colorClass}`}>{title}</div>
+      <table className="w-full text-[11px] bg-white border border-gray-100 rounded overflow-hidden">
+        {children}
+      </table>
+    </div>
+  )
+}
+
+function MonthItemization({ mo, isAccountHolder }: { mo: MonthVat; isAccountHolder: boolean }) {
+  const hasAny = mo.qi.length > 0 || mo.ql.length > 0 || mo.qs.length > 0 || mo.qbk.length > 0 || mo.qRecBk.length > 0 || mo.qe.length > 0
+  if (!hasAny) {
+    return <div className="text-[11px] text-gray-400 italic">No records for {MONTH_NAMES[mo.m]}.</div>
+  }
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      {isAccountHolder && mo.qi.length > 0 && (
+        <ItemSection title="Own Wolt income — output VAT" colorClass="text-green-700">
+          <thead className="bg-green-50"><tr>
+            <th className="text-left px-2 py-1 font-medium text-gray-500">Period</th>
+            <th className="text-left px-2 py-1 font-medium text-gray-500">Description</th>
+            <th className="text-right px-2 py-1 font-medium text-gray-500">Ex-VAT</th>
+            <th className="text-right px-2 py-1 font-medium text-green-700">VAT</th>
+          </tr></thead>
+          <tbody>
+            {mo.qi.map(i => (
+              <tr key={i.id} className="border-t border-gray-100">
+                <td className="px-2 py-1 text-gray-600">{fmtDate(i.periodStart)}–{fmtDate(i.periodEnd)}</td>
+                <td className="px-2 py-1 text-gray-600">{i.description || '—'}</td>
+                <td className="px-2 py-1 text-right font-mono">{fmt(i.totalExVat)}</td>
+                <td className="px-2 py-1 text-right font-mono font-semibold text-green-700">{fmt(i.vatAmount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </ItemSection>
+      )}
+      {isAccountHolder && mo.ql.length > 0 && (
+        <ItemSection title="Substitute worker invoices — output pass-through & input VAT paid" colorClass="text-indigo-700">
+          <thead className="bg-indigo-50"><tr>
+            <th className="text-left px-2 py-1 font-medium text-gray-500">Invoice</th>
+            <th className="text-left px-2 py-1 font-medium text-gray-500">Worker</th>
+            <th className="text-right px-2 py-1 font-medium text-indigo-600">Output VAT</th>
+            <th className="text-right px-2 py-1 font-medium text-orange-600">Input VAT</th>
+          </tr></thead>
+          <tbody>
+            {mo.ql.map(i => {
+              const outputVat = round2(i.lineItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0))
+              return (
+                <tr key={i.id} className="border-t border-gray-100">
+                  <td className="px-2 py-1 font-mono text-gray-600">{i.invoiceNumber}</td>
+                  <td className="px-2 py-1 text-gray-600">{i.sellerName}</td>
+                  <td className="px-2 py-1 text-right font-mono text-indigo-600">{fmt(outputVat)}</td>
+                  <td className="px-2 py-1 text-right font-mono text-orange-600">{fmt(i.totalVat)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </ItemSection>
+      )}
+      {isAccountHolder && mo.qbk.length > 0 && (
+        <ItemSection title="Bookkeeping service invoices issued — output VAT" colorClass="text-teal-700">
+          <thead className="bg-teal-50"><tr>
+            <th className="text-left px-2 py-1 font-medium text-gray-500">Invoice</th>
+            <th className="text-left px-2 py-1 font-medium text-gray-500">Client</th>
+            <th className="text-right px-2 py-1 font-medium text-gray-500">Ex-VAT</th>
+            <th className="text-right px-2 py-1 font-medium text-teal-700">VAT</th>
+          </tr></thead>
+          <tbody>
+            {mo.qbk.map(i => (
+              <tr key={i.id} className="border-t border-gray-100">
+                <td className="px-2 py-1 font-mono text-gray-600">{i.invoiceNumber}</td>
+                <td className="px-2 py-1 text-gray-600">{i.clientName}</td>
+                <td className="px-2 py-1 text-right font-mono">{fmt(i.amountExVat)}</td>
+                <td className="px-2 py-1 text-right font-mono font-semibold text-teal-700">{fmt(i.vatAmount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </ItemSection>
+      )}
+      {!isAccountHolder && mo.qs.length > 0 && (
+        <ItemSection title="Your invoices — output VAT" colorClass="text-purple-700">
+          <thead className="bg-purple-50"><tr>
+            <th className="text-left px-2 py-1 font-medium text-gray-500">Invoice</th>
+            <th className="text-left px-2 py-1 font-medium text-gray-500">Buyer</th>
+            <th className="text-right px-2 py-1 font-medium text-gray-500">Ex-VAT</th>
+            <th className="text-right px-2 py-1 font-medium text-purple-700">VAT</th>
+          </tr></thead>
+          <tbody>
+            {mo.qs.map(i => (
+              <tr key={i.id} className="border-t border-gray-100">
+                <td className="px-2 py-1 font-mono text-gray-600">{i.invoiceNumber}</td>
+                <td className="px-2 py-1 text-gray-600">{i.buyerName}</td>
+                <td className="px-2 py-1 text-right font-mono">{fmt(i.totalExVat)}</td>
+                <td className="px-2 py-1 text-right font-mono font-semibold text-purple-700">{fmt(i.totalVat)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </ItemSection>
+      )}
+      {mo.qRecBk.length > 0 && (
+        <ItemSection title="Bookkeeper fee paid — input VAT (deductible)" colorClass="text-purple-700">
+          <thead className="bg-purple-50"><tr>
+            <th className="text-left px-2 py-1 font-medium text-gray-500">Invoice</th>
+            <th className="text-left px-2 py-1 font-medium text-gray-500">Date</th>
+            <th className="text-right px-2 py-1 font-medium text-gray-500">Ex-VAT</th>
+            <th className="text-right px-2 py-1 font-medium text-purple-700">VAT</th>
+          </tr></thead>
+          <tbody>
+            {mo.qRecBk.map(i => (
+              <tr key={i.id} className="border-t border-gray-100">
+                <td className="px-2 py-1 font-mono text-gray-600">{i.invoiceNumber}</td>
+                <td className="px-2 py-1 text-gray-600">{fmtDate(i.issueDate)}</td>
+                <td className="px-2 py-1 text-right font-mono">{fmt(i.amountExVat)}</td>
+                <td className="px-2 py-1 text-right font-mono font-semibold text-purple-700">{fmt(i.vatAmount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </ItemSection>
+      )}
+      {mo.qe.length > 0 && (
+        <ItemSection title="Other expenses — input VAT (deductible)" colorClass="text-red-700">
+          <thead className="bg-red-50"><tr>
+            <th className="text-left px-2 py-1 font-medium text-gray-500">Description</th>
+            <th className="text-left px-2 py-1 font-medium text-gray-500">Category</th>
+            <th className="text-right px-2 py-1 font-medium text-gray-500">Ex-VAT</th>
+            <th className="text-right px-2 py-1 font-medium text-red-700">VAT</th>
+          </tr></thead>
+          <tbody>
+            {mo.qe.map(e => (
+              <tr key={e.id} className="border-t border-gray-100">
+                <td className="px-2 py-1 text-gray-600">{e.description}</td>
+                <td className="px-2 py-1 text-gray-500">{CAT_LABEL[e.category] ?? e.category}</td>
+                <td className="px-2 py-1 text-right font-mono">{fmt(e.amountExVat)}</td>
+                <td className="px-2 py-1 text-right font-mono font-semibold text-red-700">{fmt(e.vatAmount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </ItemSection>
+      )}
+    </div>
+  )
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function BooksApp({ initialClients }: { initialClients: Client[] }) {
@@ -115,12 +249,31 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
   const [linkedInvoices, setLinkedInvoices] = useState<LinkedInvoice[]>([])
   const [sellerInvoices, setSellerInvoices] = useState<LinkedInvoice[]>([])
   const [bookkeeperInvoices, setBookkeeperInvoices] = useState<BookkeeperInvoice[]>([])
-  const [receivedBkInvoices, setReceivedBkInvoices] = useState<{ id: string; invoiceNumber: string; issueDate: Date; periodEnd: Date; amountExVat: number; vatRate: number; vatAmount: number; totalIncVat: number }[]>([])
+  const [receivedBkInvoices, setReceivedBkInvoices] = useState<ReceivedBkInvoice[]>([])
+  const [capitalAssets, setCapitalAssets] = useState<{ id: string; date: Date; description: string; category: string; amountExVat: number }[]>([])
   const [showAddIncome, setShowAddIncome] = useState(false)
   const [showAddExpense, setShowAddExpense] = useState(false)
   const [expandWorkerInvoices, setExpandWorkerInvoices] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState<string | null>(null)
+  const [filingFrequency, setFilingFrequency] = useState<VatFilingFrequency>('quarterly')
+  const [expandedPeriod, setExpandedPeriod] = useState<string | null>(null)
+  const [expandedMonth, setExpandedMonth] = useState<number | null>(null)
+
+  // Load/persist VAT filing frequency preference
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(VAT_FREQ_STORAGE_KEY)
+      if (saved === 'quarterly' || saved === 'semiannual' || saved === 'annual') setFilingFrequency(saved)
+    } catch { /* ignore */ }
+  }, [])
+
+  function changeFilingFrequency(freq: VatFilingFrequency) {
+    setFilingFrequency(freq)
+    setExpandedPeriod(null)
+    setExpandedMonth(null)
+    try { localStorage.setItem(VAT_FREQ_STORAGE_KEY, freq) } catch { /* ignore */ }
+  }
 
   const [incomeForm, setIncomeForm] = useState({
     periodStart: '', periodEnd: '', woltInvoiceRef: '', description: '',
@@ -132,10 +285,17 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
     amountExVat: '', vatRate: '25.5', receiptRef: '', notes: '',
   })
 
+  // Capital-asset history needs all years up to selectedYear (the depreciation
+  // pool carries a balance forward), so it's refetched independently of the
+  // year-scoped getOwnerBooks load below, and re-run after expense add/delete.
+  const refreshCapitalAssets = useCallback((clientId: number, year: number) => {
+    getCapitalAssetHistory(clientId, year).then(setCapitalAssets).catch(() => {})
+  }, [])
+
   useEffect(() => {
     if (selectedClientId === null) return
     setLoading(true)
-    setIncomes([]); setExpenses([]); setLinkedInvoices([]); setSellerInvoices([]); setBookkeeperInvoices([]); setReceivedBkInvoices([])
+    setIncomes([]); setExpenses([]); setLinkedInvoices([]); setSellerInvoices([]); setBookkeeperInvoices([]); setReceivedBkInvoices([]); setCapitalAssets([])
     getOwnerBooks(selectedClientId, selectedYear)
       .then(({ incomes, expenses, linkedInvoices, sellerInvoices, bookkeeperInvoices, receivedBkInvoices }) => {
         setIncomes(incomes as IncomePeriod[])
@@ -147,7 +307,8 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [selectedClientId, selectedYear])
+    refreshCapitalAssets(selectedClientId, selectedYear)
+  }, [selectedClientId, selectedYear, refreshCapitalAssets])
 
   const selectedClient = initialClients.find((c) => c.id === selectedClientId)
   const isAccountHolder = selectedClient?.role !== 'SUBSTITUTE_WORKER'
@@ -203,37 +364,42 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
     : round2(clientBkFeeInputVat + otherExpVat)
   const netVatPayable = round2(filingOutputVat - filingInputVat)
 
-  const quarters = useMemo(() => [1, 2, 3, 4].map((q) => {
-    const qi = incomes.filter(i => getQuarter(i.periodStart) === q)
-    // Use periodEnd (service period) not invoiceDate — a June 15-30 job invoiced in July is Q2 VAT
-    const ql = linkedInvoices.filter(i => getQuarter(i.periodEnd) === q)
-    const qs = sellerInvoices.filter(i => getQuarter(i.periodEnd) === q)
-    const qe = expenses.filter(e => getQuarter(e.date) === q)
-    // Use periodEnd (service period) for BK invoices too, consistent with client invoices
-    const qbk = bookkeeperInvoices.filter(i => getQuarter(i.periodEnd) === q)
-    const qRecBk = receivedBkInvoices.filter(i => getQuarter(i.periodEnd) === q)
-    const qlItems = ql.flatMap(i => i.lineItems)
-    if (isAccountHolder) {
-      const outVatOwn  = round2(qi.reduce((s, i) => s + i.vatAmount, 0))
-      const outVatSubs = round2(qlItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0))
-      const outVatBk   = round2(qbk.reduce((s, i) => s + i.vatAmount, 0))
-      const outVat     = round2(outVatOwn + outVatSubs + outVatBk)
-      const inVatW     = round2(ql.reduce((s, i) => s + i.totalVat, 0))
-      const inVatBkFee = round2(qRecBk.reduce((s, i) => s + i.vatAmount, 0))
-      const inVatE     = round2(qe.reduce((s, e) => s + e.vatAmount, 0))
-      return { q, outVat, outVatOwn, outVatSubs, outVatBk, inVatW, inVatBkFee, inVatE, net: round2(outVat - inVatW - inVatBkFee - inVatE) }
-    } else {
-      const outVat    = round2(qs.reduce((s, i) => s + i.totalVat, 0))
-      const inVatBkFee = round2(qRecBk.reduce((s, i) => s + i.vatAmount, 0))
-      const inVatE    = round2(qe.reduce((s, e) => s + e.vatAmount, 0))
-      return { q, outVat, outVatOwn: 0, outVatSubs: 0, outVatBk: 0, inVatW: 0, inVatBkFee, inVatE, net: round2(outVat - inVatBkFee - inVatE) }
-    }
-  }), [incomes, linkedInvoices, sellerInvoices, expenses, bookkeeperInvoices, receivedBkInvoices, isAccountHolder])
+  // ── Monthly VAT breakdown, source-attributed and kept alongside the raw
+  // contributing records so period/month rows can be expanded for a full trace. ──
+  const months = useMemo<MonthVat[]>(
+    () => computeMonths({ incomes, linkedInvoices, sellerInvoices, expenses, bookkeeperInvoices, receivedBkInvoices }, isAccountHolder),
+    [incomes, linkedInvoices, sellerInvoices, expenses, bookkeeperInvoices, receivedBkInvoices, isAccountHolder]
+  )
+
+  // ── Group months into filing periods (quarterly/semiannual/annual) ──────────
+  const periods = useMemo<VatPeriod[]>(
+    () => computePeriods(months, filingFrequency, selectedYear),
+    [months, filingFrequency, selectedYear]
+  )
+
+  // Capital purchases (EQUIPMENT/VEHICLE over the small-acquisition threshold)
+  // aren't expensed in full — they're depreciated, so the Tax Return tab's
+  // category breakdown excludes them and shows the depreciation amount instead.
+  const isCapitalAsset = (e: Expense) =>
+    DEPRECIABLE_CATEGORIES.includes(e.category) && e.amountExVat > SMALL_ACQUISITION_THRESHOLD
 
   const expByCategory = useMemo(() => EXPENSE_CATEGORIES.map((cat) => {
-    const rows = expenses.filter((e) => e.category === cat.value)
+    const rows = expenses.filter((e) => e.category === cat.value && !isCapitalAsset(e))
     return { ...cat, rows, total: round2(rows.reduce((s, e) => s + e.amountExVat, 0)) }
   }).filter((c) => c.rows.length > 0), [expenses])
+
+  const capitalAssetAdditionsThisYear = round2(expenses.filter(isCapitalAsset).reduce((s, e) => s + e.amountExVat, 0))
+
+  const depreciationSchedule = useMemo(
+    () => computeDepreciationSchedule(capitalAssets, selectedYear),
+    [capitalAssets, selectedYear]
+  )
+
+  // Tax Return tab only — replaces the raw cost of capital purchases with this
+  // year's allowed depreciation. otherExpExVat/netProfit (dashboard cards,
+  // Expenses tab) stay cash-basis and are untouched.
+  const taxDeductibleExpenses = round2(otherExpExVat - capitalAssetAdditionsThisYear + depreciationSchedule.currentYear.depreciation)
+  const taxableProfit = round2(incomeExVat - taxDeductibleExpenses)
 
   const handleSaveIncome = useCallback(() => {
     if (!selectedClientId || !incomeForm.periodStart || !incomeForm.periodEnd || !incomeForm.totalExVat) return
@@ -289,8 +455,9 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
       ))
       setExpenseForm({ date: todayIso(), description: '', supplier: '', category: 'OTHER', amountExVat: '', vatRate: '25.5', receiptRef: '', notes: '' })
       setShowAddExpense(false)
+      refreshCapitalAssets(selectedClientId, selectedYear)
     })
-  }, [selectedClientId, expenseForm])
+  }, [selectedClientId, selectedYear, expenseForm, refreshCapitalAssets])
 
   const handleDeleteExpense = useCallback((id: string) => {
     if (!confirm('Delete this expense?')) return
@@ -299,11 +466,12 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
       try {
         await deleteOwnerExpense(id)
         setExpenses((prev) => prev.filter((e) => e.id !== id))
+        if (selectedClientId) refreshCapitalAssets(selectedClientId, selectedYear)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to delete expense.')
       }
     })
-  }, [])
+  }, [selectedClientId, selectedYear, refreshCapitalAssets])
 
   const years = Array.from({ length: 3 }, (_, i) => new Date().getFullYear() - i)
 
@@ -1043,118 +1211,215 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
           {/* ════════════════════════════════════════════════════════════════ */}
           {!loading && activeTab === 'vat' && (
             <div>
-              <div className="mb-4">
-                <h3 className="text-sm font-bold text-gray-700 mb-1">Quarterly VAT Summary — {selectedYear}</h3>
-                <p className="text-[10px] text-gray-400">File quarterly via OmaVero. Q1 Jan–Mar · Q2 Apr–Jun · Q3 Jul–Sep · Q4 Oct–Dec</p>
+              <div className="mb-4 flex items-end justify-between gap-4 flex-wrap">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-700 mb-1">VAT Summary — {selectedYear}</h3>
+                  <p className="text-[10px] text-gray-400">
+                    {filingFrequency === 'quarterly' && 'File quarterly via OmaVero. Q1 Jan–Mar · Q2 Apr–Jun · Q3 Jul–Sep · Q4 Oct–Dec.'}
+                    {filingFrequency === 'semiannual' && 'File twice a year via OmaVero. H1 Jan–Jun · H2 Jul–Dec.'}
+                    {filingFrequency === 'annual' && 'File once a year via OmaVero, for the whole calendar year.'}
+                    {' '}Click a row to see the month-by-month breakdown; click a month to see the exact records behind the numbers.
+                  </p>
+                </div>
+                <div className="flex gap-1 bg-gray-100 rounded p-0.5">
+                  {([
+                    ['quarterly', 'Quarterly'],
+                    ['semiannual', 'Twice a year'],
+                    ['annual', 'Once a year'],
+                  ] as [VatFilingFrequency, string][]).map(([freq, label]) => (
+                    <button
+                      key={freq}
+                      type="button"
+                      onClick={() => changeFilingFrequency(freq)}
+                      className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
+                        filingFrequency === freq ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-5">
-                {isAccountHolder ? (
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-50 border-b border-gray-200">
-                      <tr>
-                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Quarter</th>
-                        <th className="text-right px-3 py-3 font-semibold text-green-700">
-                          Myyntivero<br/><span className="text-[10px] font-normal text-gray-400">Wolt own income</span>
-                        </th>
-                        {linkedInvoices.length > 0 && (
-                          <th className="text-right px-3 py-3 font-semibold text-indigo-600">
-                            Myyntivero<br/><span className="text-[10px] font-normal text-gray-400">via substitutes</span>
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="text-left px-4 py-3 font-semibold text-gray-600">Period</th>
+                      {isAccountHolder ? (
+                        <>
+                          <th className="text-right px-3 py-3 font-semibold text-green-700">
+                            Myyntivero<br/><span className="text-[10px] font-normal text-gray-400">Wolt own income</span>
                           </th>
-                        )}
-                        {bookkeeperInvoices.length > 0 && (
-                          <th className="text-right px-3 py-3 font-semibold text-teal-700">
-                            Myyntivero<br/><span className="text-[10px] font-normal text-gray-400">BK services (if you)</span>
+                          {linkedInvoices.length > 0 && (
+                            <th className="text-right px-3 py-3 font-semibold text-indigo-600">
+                              Myyntivero<br/><span className="text-[10px] font-normal text-gray-400">via substitutes</span>
+                            </th>
+                          )}
+                          {bookkeeperInvoices.length > 0 && (
+                            <th className="text-right px-3 py-3 font-semibold text-teal-700">
+                              Myyntivero<br/><span className="text-[10px] font-normal text-gray-400">BK services (if you)</span>
+                            </th>
+                          )}
+                          <th className="text-right px-3 py-3 font-semibold text-green-800">
+                            Total Output<br/><span className="text-[10px] font-normal text-gray-400">→ Vero owes</span>
                           </th>
-                        )}
-                        <th className="text-right px-3 py-3 font-semibold text-green-800">
-                          Total Output<br/><span className="text-[10px] font-normal text-gray-400">→ Vero owes</span>
-                        </th>
-                        {linkedInvoices.length > 0 && (
-                          <th className="text-right px-3 py-3 font-semibold text-orange-600">
-                            Ostovero<br/><span className="text-[10px] font-normal text-gray-400">worker invoices</span>
+                          {linkedInvoices.length > 0 && (
+                            <th className="text-right px-3 py-3 font-semibold text-orange-600">
+                              Ostovero<br/><span className="text-[10px] font-normal text-gray-400">worker invoices</span>
+                            </th>
+                          )}
+                          {receivedBkInvoices.length > 0 && (
+                            <th className="text-right px-3 py-3 font-semibold text-purple-600">
+                              Ostovero<br/><span className="text-[10px] font-normal text-gray-400">BK fee paid ✓ deduct</span>
+                            </th>
+                          )}
+                          <th className="text-right px-3 py-3 font-semibold text-red-600">
+                            Ostovero<br/><span className="text-[10px] font-normal text-gray-400">other expenses</span>
                           </th>
-                        )}
-                        {receivedBkInvoices.length > 0 && (
-                          <th className="text-right px-3 py-3 font-semibold text-purple-600">
-                            Ostovero<br/><span className="text-[10px] font-normal text-gray-400">BK fee paid ✓ deduct</span>
+                          <th className="text-right px-3 py-3 font-semibold text-blue-700">
+                            Net payable<br/><span className="text-[10px] font-normal text-gray-400">to Vero</span>
                           </th>
-                        )}
-                        <th className="text-right px-3 py-3 font-semibold text-red-600">
-                          Ostovero<br/><span className="text-[10px] font-normal text-gray-400">other expenses</span>
-                        </th>
-                        <th className="text-right px-3 py-3 font-semibold text-blue-700">
-                          Net payable<br/><span className="text-[10px] font-normal text-gray-400">to Vero</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {quarters.map(({ q, ...d }) => {
-                        const labels = ['Jan–Mar', 'Apr–Jun', 'Jul–Sep', 'Oct–Dec']
-                        const active = d.outVat !== 0 || d.inVatW !== 0 || d.inVatE !== 0
-                        return (
-                          <tr key={q} className={`border-t border-gray-100 ${!active ? 'opacity-40' : ''}`}>
-                            <td className="px-4 py-3 font-semibold">Q{q} <span className="font-normal text-gray-500">{labels[q-1]}</span></td>
-                            <td className="px-3 py-3 text-right font-mono text-green-700">{fmt(d.outVatOwn)}</td>
-                            {linkedInvoices.length > 0 && <td className="px-3 py-3 text-right font-mono text-indigo-600">{fmt(d.outVatSubs)}</td>}
-                            {bookkeeperInvoices.length > 0 && <td className="px-3 py-3 text-right font-mono text-teal-700">{fmt(d.outVatBk)}</td>}
-                            <td className="px-3 py-3 text-right font-mono font-bold text-green-800">{fmt(d.outVat)}</td>
-                            {linkedInvoices.length > 0 && <td className="px-3 py-3 text-right font-mono text-orange-600">{fmt(d.inVatW)}</td>}
-                            {receivedBkInvoices.length > 0 && <td className="px-3 py-3 text-right font-mono text-purple-600">{fmt(d.inVatBkFee)}</td>}
-                            <td className="px-3 py-3 text-right font-mono text-red-600">{fmt(d.inVatE)}</td>
-                            <td className={`px-3 py-3 text-right font-mono font-bold ${d.net >= 0 ? 'text-blue-700' : 'text-green-600'}`}>{fmt(d.net)}</td>
+                        </>
+                      ) : (
+                        <>
+                          <th className="text-right px-3 py-3 font-semibold text-purple-700">
+                            Output VAT<br/><span className="text-[10px] font-normal text-gray-400">Your invoices</span>
+                          </th>
+                          {receivedBkInvoices.length > 0 && (
+                            <th className="text-right px-3 py-3 font-semibold text-purple-600">
+                              Ostovero<br/><span className="text-[10px] font-normal text-gray-400">BK fee paid ✓ deduct</span>
+                            </th>
+                          )}
+                          <th className="text-right px-3 py-3 font-semibold text-red-600">
+                            Input VAT<br/><span className="text-[10px] font-normal text-gray-400">Expenses</span>
+                          </th>
+                          <th className="text-right px-3 py-3 font-semibold text-blue-700">
+                            Net<br/><span className="text-[10px] font-normal text-gray-400">payable</span>
+                          </th>
+                        </>
+                      )}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {periods.map((p) => {
+                      const active = isAccountHolder
+                        ? (p.outVat !== 0 || p.inVatW !== 0 || p.inVatE !== 0)
+                        : (p.outVat !== 0 || p.inVatE !== 0)
+                      const isOpen = expandedPeriod === p.key
+                      return (
+                        <Fragment key={p.key}>
+                          <tr
+                            onClick={() => { setExpandedPeriod(isOpen ? null : p.key); setExpandedMonth(null) }}
+                            className={`border-t border-gray-100 cursor-pointer hover:bg-gray-50 ${!active ? 'opacity-40' : ''}`}
+                          >
+                            <td className="px-4 py-3 font-semibold">
+                              <span className="text-gray-400 mr-1">{isOpen ? '▾' : '▸'}</span>{p.label}
+                              <a
+                                href={`/api/vat-report/pdf?clientId=${selectedClientId}&year=${selectedYear}&freq=${filingFrequency}&key=${p.key}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="ml-2 font-normal text-[10px] text-blue-600 hover:underline"
+                              >
+                                PDF
+                              </a>
+                            </td>
+                            <VatRowCells d={p} isAccountHolder={isAccountHolder} showSubs={linkedInvoices.length > 0} showBk={bookkeeperInvoices.length > 0} showRecBk={receivedBkInvoices.length > 0} />
                           </tr>
-                        )
-                      })}
-                    </tbody>
-                    <tfoot className="border-t-2 border-gray-300 bg-gray-50">
-                      <tr>
-                        <td className="px-4 py-3 font-bold text-gray-700">Annual Total</td>
-                        <td className="px-3 py-3 text-right font-bold font-mono text-green-700">{fmt(totalIncomeVat)}</td>
-                        {linkedInvoices.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-indigo-600">{fmt(woltOutputVatFromSubs)}</td>}
-                        {bookkeeperInvoices.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-teal-700">{fmt(bkIncomeVat)}</td>}
-                        <td className="px-3 py-3 text-right font-bold font-mono text-green-800">{fmt(filingOutputVat)}</td>
-                        {linkedInvoices.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-orange-600">{fmt(workerCostVat)}</td>}
-                        {receivedBkInvoices.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-purple-600">{fmt(clientBkFeeInputVat)}</td>}
-                        <td className="px-3 py-3 text-right font-bold font-mono text-red-600">{fmt(otherExpVat)}</td>
-                        <td className={`px-3 py-3 text-right font-bold font-mono text-lg ${netVatPayable >= 0 ? 'text-blue-700' : 'text-green-600'}`}>{fmt(netVatPayable)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                ) : (
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-50 border-b border-gray-200">
-                      <tr>
-                        <th className="text-left px-4 py-3 font-semibold text-gray-600">Quarter</th>
-                        <th className="text-right px-3 py-3 font-semibold text-purple-700">Output VAT<br/><span className="text-[10px] font-normal text-gray-400">Your invoices</span></th>
-                        <th className="text-right px-3 py-3 font-semibold text-red-600">Input VAT<br/><span className="text-[10px] font-normal text-gray-400">Expenses</span></th>
-                        <th className="text-right px-3 py-3 font-semibold text-blue-700">Net<br/><span className="text-[10px] font-normal text-gray-400">payable</span></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {quarters.map(({ q, ...d }) => {
-                        const labels = ['Jan–Mar', 'Apr–Jun', 'Jul–Sep', 'Oct–Dec']
-                        const active = d.outVat !== 0 || d.inVatE !== 0
-                        return (
-                          <tr key={q} className={`border-t border-gray-100 ${!active ? 'opacity-40' : ''}`}>
-                            <td className="px-4 py-3 font-semibold">Q{q} <span className="font-normal text-gray-500">{labels[q-1]}</span></td>
-                            <td className="px-3 py-3 text-right font-mono text-purple-700">{fmt(d.outVat)}</td>
-                            <td className="px-3 py-3 text-right font-mono text-red-600">{fmt(d.inVatE)}</td>
-                            <td className={`px-3 py-3 text-right font-mono font-bold ${d.net >= 0 ? 'text-blue-700' : 'text-green-600'}`}>{fmt(d.net)}</td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                    <tfoot className="border-t-2 border-gray-300 bg-gray-50">
-                      <tr>
-                        <td className="px-4 py-3 font-bold text-gray-700">Annual Total</td>
-                        <td className="px-3 py-3 text-right font-bold font-mono text-purple-700">{fmt(sellerIncomeVat)}</td>
-                        <td className="px-3 py-3 text-right font-bold font-mono text-red-600">{fmt(otherExpVat)}</td>
-                        <td className={`px-3 py-3 text-right font-bold font-mono text-lg ${netVatPayable >= 0 ? 'text-blue-700' : 'text-green-600'}`}>{fmt(netVatPayable)}</td>
-                      </tr>
-                    </tfoot>
-                  </table>
-                )}
+                          {isOpen && (
+                            <tr key={`${p.key}-detail`}>
+                              <td colSpan={99} className="p-0 bg-gray-50/60">
+                                <div className="px-4 py-3">
+                                  <table className="w-full text-[11px] bg-white border border-gray-200 rounded-lg overflow-hidden">
+                                    <thead className="bg-gray-100">
+                                      <tr>
+                                        <th className="text-left px-3 py-2 font-semibold text-gray-500">Month</th>
+                                        {isAccountHolder ? (
+                                          <>
+                                            <th className="text-right px-3 py-2 font-semibold text-green-700">Own income</th>
+                                            {linkedInvoices.length > 0 && <th className="text-right px-3 py-2 font-semibold text-indigo-600">Via substitutes</th>}
+                                            {bookkeeperInvoices.length > 0 && <th className="text-right px-3 py-2 font-semibold text-teal-700">BK services</th>}
+                                            <th className="text-right px-3 py-2 font-semibold text-green-800">Total Output</th>
+                                            {linkedInvoices.length > 0 && <th className="text-right px-3 py-2 font-semibold text-orange-600">Worker inv.</th>}
+                                            {receivedBkInvoices.length > 0 && <th className="text-right px-3 py-2 font-semibold text-purple-600">BK fee paid</th>}
+                                            <th className="text-right px-3 py-2 font-semibold text-red-600">Expenses</th>
+                                            <th className="text-right px-3 py-2 font-semibold text-blue-700">Net</th>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <th className="text-right px-3 py-2 font-semibold text-purple-700">Output VAT</th>
+                                            {receivedBkInvoices.length > 0 && <th className="text-right px-3 py-2 font-semibold text-purple-600">BK fee paid</th>}
+                                            <th className="text-right px-3 py-2 font-semibold text-red-600">Expenses</th>
+                                            <th className="text-right px-3 py-2 font-semibold text-blue-700">Net</th>
+                                          </>
+                                        )}
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {p.months.map((mo) => {
+                                        const moActive = isAccountHolder
+                                          ? (mo.outVat !== 0 || mo.inVatW !== 0 || mo.inVatE !== 0 || mo.inVatBkFee !== 0)
+                                          : (mo.outVat !== 0 || mo.inVatE !== 0 || mo.inVatBkFee !== 0)
+                                        const monthOpen = expandedMonth === mo.m
+                                        return (
+                                          <Fragment key={mo.m}>
+                                            <tr
+                                              onClick={() => setExpandedMonth(monthOpen ? null : mo.m)}
+                                              className={`border-t border-gray-100 cursor-pointer hover:bg-blue-50 ${!moActive ? 'text-gray-300' : ''}`}
+                                            >
+                                              <td className="px-3 py-2 font-medium">
+                                                <span className="text-gray-400 mr-1">{monthOpen ? '▾' : '▸'}</span>{MONTH_NAMES[mo.m]}
+                                              </td>
+                                              <VatRowCells d={mo} isAccountHolder={isAccountHolder} showSubs={linkedInvoices.length > 0} showBk={bookkeeperInvoices.length > 0} showRecBk={receivedBkInvoices.length > 0} muted={!moActive} />
+                                            </tr>
+                                            {monthOpen && (
+                                              <tr key={`${mo.m}-detail`}>
+                                                <td colSpan={99} className="p-0">
+                                                  <div className="px-4 py-3 bg-blue-50/40 border-t border-blue-100">
+                                                    <MonthItemization mo={mo} isAccountHolder={isAccountHolder} />
+                                                  </div>
+                                                </td>
+                                              </tr>
+                                            )}
+                                          </Fragment>
+                                        )
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      )
+                    })}
+                  </tbody>
+                  <tfoot className="border-t-2 border-gray-300 bg-gray-50">
+                    <tr>
+                      <td className="px-4 py-3 font-bold text-gray-700">Annual Total</td>
+                      {isAccountHolder ? (
+                        <>
+                          <td className="px-3 py-3 text-right font-bold font-mono text-green-700">{fmt(totalIncomeVat)}</td>
+                          {linkedInvoices.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-indigo-600">{fmt(woltOutputVatFromSubs)}</td>}
+                          {bookkeeperInvoices.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-teal-700">{fmt(bkIncomeVat)}</td>}
+                          <td className="px-3 py-3 text-right font-bold font-mono text-green-800">{fmt(filingOutputVat)}</td>
+                          {linkedInvoices.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-orange-600">{fmt(workerCostVat)}</td>}
+                          {receivedBkInvoices.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-purple-600">{fmt(clientBkFeeInputVat)}</td>}
+                          <td className="px-3 py-3 text-right font-bold font-mono text-red-600">{fmt(otherExpVat)}</td>
+                          <td className={`px-3 py-3 text-right font-bold font-mono text-lg ${netVatPayable >= 0 ? 'text-blue-700' : 'text-green-600'}`}>{fmt(netVatPayable)}</td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-3 py-3 text-right font-bold font-mono text-purple-700">{fmt(sellerIncomeVat)}</td>
+                          {receivedBkInvoices.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-purple-600">{fmt(clientBkFeeInputVat)}</td>}
+                          <td className="px-3 py-3 text-right font-bold font-mono text-red-600">{fmt(otherExpVat)}</td>
+                          <td className={`px-3 py-3 text-right font-bold font-mono text-lg ${netVatPayable >= 0 ? 'text-blue-700' : 'text-green-600'}`}>{fmt(netVatPayable)}</td>
+                        </>
+                      )}
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
 
               {/* ── VAT logic explainer (account holders) ── */}
@@ -1258,6 +1523,58 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                 <p className="text-[10px] text-gray-400">Elinkeinotoiminnan veroilmoitus (Form 5/6) · sole trader reference figures for OmaVero.</p>
               </div>
 
+              {(depreciationSchedule.currentYear.openingBalance > 0 || depreciationSchedule.currentYear.additions > 0) && (
+                <div className="bg-white border border-amber-200 rounded-xl overflow-hidden mb-4">
+                  <div className="px-5 py-3 bg-amber-50 border-b border-amber-200">
+                    <div className="text-xs font-bold text-amber-800">Capital Assets & Depreciation (Poistot)</div>
+                    <div className="text-[10px] text-amber-700 mt-0.5">
+                      Equipment/vehicle purchases over {fmt(SMALL_ACQUISITION_THRESHOLD)} € can&apos;t be deducted in full —
+                      Finnish tax law (EVL 30§) requires depreciating them at max {DEPRECIATION_RATE * 100}%/year on the
+                      declining balance, until the remaining balance drops to {fmt(SMALL_ACQUISITION_THRESHOLD)} € or below,
+                      at which point it&apos;s written off in full. Calculated automatically below.
+                    </div>
+                  </div>
+                  <table className="w-full text-xs">
+                    <tbody>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-5 py-2 text-gray-500">Opening balance (menojäännös 1.1.{selectedYear})</td>
+                        <td className="px-5 py-2 text-right font-mono">{fmt(depreciationSchedule.currentYear.openingBalance)} €</td>
+                      </tr>
+                      <tr className="border-b border-gray-100">
+                        <td className="px-5 py-2 text-gray-500">+ New acquisitions this year</td>
+                        <td className="px-5 py-2 text-right font-mono">{fmt(depreciationSchedule.currentYear.additions)} €</td>
+                      </tr>
+                      <tr className="border-b border-gray-100 bg-amber-50/40">
+                        <td className="px-5 py-2 font-semibold text-amber-800">− Depreciation this year (poisto)</td>
+                        <td className="px-5 py-2 text-right font-mono font-semibold text-amber-800">{fmt(depreciationSchedule.currentYear.depreciation)} €</td>
+                      </tr>
+                      <tr>
+                        <td className="px-5 py-2 font-bold text-gray-700">= Closing balance (menojäännös 31.12.{selectedYear}, carried forward)</td>
+                        <td className="px-5 py-2 text-right font-mono font-bold">{fmt(depreciationSchedule.currentYear.closingBalance)} €</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  {expenses.filter(isCapitalAsset).length > 0 && (
+                    <div className="border-t border-gray-100 px-5 py-3">
+                      <div className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1.5">
+                        Qualifying purchases acquired in {selectedYear}
+                      </div>
+                      <table className="w-full text-[11px]">
+                        <tbody>
+                          {expenses.filter(isCapitalAsset).map((e) => (
+                            <tr key={e.id} className="border-t border-gray-50">
+                              <td className="py-1 text-gray-500">{fmtDate(e.date)}</td>
+                              <td className="py-1 text-gray-600">{e.description}</td>
+                              <td className="py-1 text-right font-mono">{fmt(e.amountExVat)} €</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100 overflow-hidden">
 
                 {isAccountHolder ? (
@@ -1318,7 +1635,19 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                   </div>
                 ))}
 
-                {otherExpExVat === 0 && (
+                {depreciationSchedule.currentYear.depreciation > 0 && (
+                  <div className="px-5 py-3 bg-amber-50">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-xs font-semibold text-amber-800">− Poistot / Depreciation</div>
+                        <div className="text-[10px] text-amber-600">capital assets — see panel above</div>
+                      </div>
+                      <div className="text-sm font-semibold text-amber-800 font-mono">− {fmt(depreciationSchedule.currentYear.depreciation)} €</div>
+                    </div>
+                  </div>
+                )}
+
+                {taxDeductibleExpenses === 0 && (
                   <div className="px-5 py-3 text-[10px] text-gray-400 italic">
                     No other expenses — add them in the Expenses tab.
                   </div>
@@ -1327,10 +1656,10 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
                 <div className="px-5 py-4 bg-gray-50">
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-bold text-gray-700">= Verotettava tulos / Taxable profit</div>
-                    <div className={`text-xl font-bold font-mono ${netProfit >= 0 ? 'text-blue-700' : 'text-red-600'}`}>{fmt(netProfit)} €</div>
+                    <div className={`text-xl font-bold font-mono ${taxableProfit >= 0 ? 'text-blue-700' : 'text-red-600'}`}>{fmt(taxableProfit)} €</div>
                   </div>
                   <div className="text-[10px] text-gray-400 mt-1 font-mono">
-                    {fmt(incomeExVat)} − {fmt(otherExpExVat)} = {fmt(netProfit)} €
+                    {fmt(incomeExVat)} − {fmt(taxDeductibleExpenses)} = {fmt(taxableProfit)} €
                   </div>
                 </div>
               </div>
@@ -1338,8 +1667,11 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
               <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4 text-xs text-blue-700">
                 <strong>How to file:</strong> OmaVero → Veroilmoitus → Elinkeinotoiminnan veroilmoitus.
                 Revenue (<strong>{fmt(incomeExVat)} €</strong>) → <em>Liikevaihto</em>.
-                {otherExpExVat > 0 && <> Expenses (<strong>{fmt(otherExpExVat)} €</strong>) → respective categories.</>}
-                {' '}Taxable profit = <strong>{fmt(netProfit)} €</strong>.
+                {taxDeductibleExpenses > 0 && <> Expenses (<strong>{fmt(taxDeductibleExpenses)} €</strong>) → respective categories.</>}
+                {depreciationSchedule.currentYear.depreciation > 0 && (
+                  <> Includes <strong>{fmt(depreciationSchedule.currentYear.depreciation)} €</strong> of depreciation on capital assets — see Capital Assets panel above.</>
+                )}
+                {' '}Taxable profit = <strong>{fmt(taxableProfit)} €</strong>.
               </div>
             </div>
           )}

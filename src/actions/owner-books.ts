@@ -3,6 +3,7 @@
 import { db } from '@/lib/db'
 import { revalidatePath } from 'next/cache'
 import { round2, getQuarter } from '@/lib/calculations'
+import { DEPRECIABLE_CATEGORIES, SMALL_ACQUISITION_THRESHOLD } from '@/lib/depreciation'
 
 // ─── Input types ──────────────────────────────────────────────────────────────
 
@@ -88,6 +89,24 @@ export async function createOwnerExpense(data: OwnerExpenseInput) {
 export async function deleteOwnerExpense(id: string) {
   await db.ownerExpense.deleteMany({ where: { id } })
   revalidatePath('/books')
+}
+
+// ─── Capital asset history (for depreciation / poistot) ──────────────────────
+// All qualifying capital purchases (EQUIPMENT/VEHICLE over the small-
+// acquisition threshold) up to and including `throughYear` — depreciation is
+// a running pool, so the schedule needs full history, not just one year.
+
+export async function getCapitalAssetHistory(clientId: number, throughYear: number) {
+  return db.ownerExpense.findMany({
+    where: {
+      clientId,
+      category: { in: DEPRECIABLE_CATEGORIES },
+      amountExVat: { gt: SMALL_ACQUISITION_THRESHOLD },
+      date: { lt: new Date(`${throughYear + 1}-01-01`) },
+    },
+    orderBy: { date: 'asc' },
+    select: { id: true, date: true, description: true, category: true, amountExVat: true },
+  })
 }
 
 // ─── Fetch books for a client + year ─────────────────────────────────────────
