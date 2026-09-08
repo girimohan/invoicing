@@ -1,50 +1,71 @@
-# Wolt Substitute Invoice Tool
+# Barmo Bookkeeping
 
-A bookkeeping tool for Finnish substitute workers (Wolt couriers) and their bookkeeper.
+A desktop bookkeeping tool for Finnish sole traders doing platform work (Wolt
+and similar), and for the bookkeeper who files on their behalf. Tracks income,
+expenses, VAT and income tax reference figures per client, and produces the
+figures needed for OmaVero.
 
-## Key Features
+Originally built around invoicing between substitute couriers and account
+holders. Every client is now a platform-account owner in their own right, so
+that workflow has moved to **Tools → Legacy** and the app leads with the
+bookkeeping cycle instead.
 
-### Substitute Worker Invoices (`/`)
-- Generate invoices from substitute worker → account holder (Wolt)
-- Invoice number auto-format: `BB-{workerID}-{YYYYMM}-{1/2}`
-- Line items: Wolt fees, tips, other — with configurable share % (default 75%) and VAT rate
-- Select worker and account holder from saved clients, or fill manually
-- Live HTML preview + PDF download on save
-- Bilingual labels (Finnish / English) on all invoices
+## Screens
 
-### Bookkeeper Invoices (`/bookkeeper`)
-- Create invoices **from yourself (bookkeeper)** to clients
-- Default service: bookkeeping & tax filing, €25.00 + 25.5% VAT = €31.38
-- Your details (name, Business ID, VAT ID, IBAN, BIC) saved in browser — fill once, reuse always
-- Select any saved client from the database as the bill-to party
-- Invoice number auto-format: `BK-{YYYYMM}-{seq}`
-- Live preview + PDF download
-- History table with all past bookkeeper invoices
+### Dashboard (`/`)
+The daily working view. One row per client for the current VAT period:
+turnover, output VAT, input VAT and net VAT payable, plus the filing deadline
+countdown (*arvonlisäveroilmoitus* is due on the 12th of the second month after
+the period ends). Flags clients with no entries yet and clients not yet billed
+for your bookkeeping fee. Switch period or filing frequency at the top; click a
+client to open their books.
 
-### Invoice History (`/invoices`)
-- Invoices grouped by substitute worker
-- **VAT filing summary**: annual totals + quarterly breakdown (Q1–Q4) — ready for OmaVero
-- Per-worker totals: turnover excl. VAT, VAT collected, total incl. VAT
-- Expand any worker to see their individual invoices; expand an invoice to see line items
-- Download PDF or delete any invoice
+### Client Books (`/books`)
+The core of the app, per client and per year:
+- **Income** — Wolt pay periods (ex-VAT amount, tips at 0% VAT, Wolt invoice ref)
+- **Expenses** — categorised business costs with VAT
+- **VAT** — monthly breakdown grouped into quarterly / half-year / annual filing
+  periods, each expandable down to the individual contributing records, with a
+  PDF report per period
+- **Tax Return** — *elinkeinotoiminnan veroilmoitus* reference figures, including
+  automatic declining-balance depreciation (*poistot*, EVL 30§) on capital assets
+- **Vehicle** — mileage and trip log (*ajopäiväkirja*)
 
-### Client Database (`/clients`)
-- Store substitute workers and account holders with full details
-- Fields: name, Business ID (Y-tunnus), VAT ID, address, IBAN, BIC, email, phone, notes
-- Client IDs start at 101 and auto-increment
-- Deleting a client safely unlinks their invoices (no data loss)
+### Clients (`/clients`)
+Client records — name, Y-tunnus, VAT ID, address, IBAN/BIC, contact details.
+Client IDs start at 101. Deleting a client unlinks their invoices rather than
+destroying them.
+
+### Bookkeeper (`/bookkeeper`, `/my-vat`)
+Issue your own bookkeeping-fee invoices to clients, and track your own VAT
+position for OmaVero across both bookkeeping fees and your own gig work.
+
+### Tools (`/tools`)
+YEL pension calculator, plus the legacy substitute-worker invoice generator and
+its invoice history — kept fully working so historical invoices stay editable
+and correctly reported.
+
+## VAT allocation rule
+Every income record is assigned to a VAT period by its **service period**
+(`periodEnd` / `periodStart`), never by invoice or issue date. A job done
+15–30 June but invoiced in July belongs to Q2. This holds for client invoices,
+bookkeeper invoices and income periods alike.
 
 ## Tech Stack
 - **Next.js 14** (App Router, Server Actions)
-- **Prisma 5 + SQLite** (`prisma/dev.db`)
+- **Prisma 5 + SQLite**
+- **Electron 42** + electron-builder (Windows NSIS installer)
 - **@react-pdf/renderer** — server-side PDF generation
-- **Tailwind CSS 3**
-- **TypeScript** (strict mode)
+- **Tailwind CSS 3**, **TypeScript** (strict)
 
 ## Running Locally
 ```bash
 npm install
-npx prisma migrate dev
-npm run dev
+npx prisma migrate deploy
+npm run electron:dev     # Next.js dev server + Electron together
+npm test                 # Jest unit tests
 ```
-Open [http://localhost:3000](http://localhost:3000).
+
+See [DEVELOPER_NOTES.md](DEVELOPER_NOTES.md) for database handling, migrations
+and the build/release workflow — **read the database protection rules before
+running any Prisma command.**

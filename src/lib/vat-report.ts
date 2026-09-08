@@ -164,3 +164,77 @@ export function computePeriods(months: MonthVat[], filingFrequency: VatFilingFre
     bucket(`q-${q}`, `Q${q + 1} (${MONTH_NAMES[q * 3]}–${MONTH_NAMES[q * 3 + 2]})`, months.slice(q * 3, q * 3 + 3))
   )
 }
+
+// ── Annual figures (income tax reference) ───────────────────────────────────
+// Shared by the Client Books Tax Return tab and the Filing Guide so the two
+// can never quote different numbers for the same client and year.
+
+export type AnnualFigures = {
+  woltGrossFromSubstitutes: number
+  ownerCutExVat: number
+  ownerCutVat: number
+  woltOutputVatFromSubs: number
+  workerCostExVat: number
+  workerCostVat: number
+  bkIncomeExVat: number
+  bkIncomeVat: number
+  totalIncomeExVat: number
+  totalIncomeTips: number
+  totalIncomeVat: number
+  totalIncomeGross: number
+  sellerIncomeExVat: number
+  sellerIncomeVat: number
+  otherExpExVat: number
+  otherExpVat: number
+  clientBkFeeInputVat: number
+  /** Turnover for income tax purposes — what goes in "Net sales" on Form 5. */
+  incomeExVat: number
+  /** Cash-basis profit, before replacing capital purchases with depreciation. */
+  netProfit: number
+}
+
+export function computeAnnualFigures(
+  data: VatReportSourceData,
+  isAccountHolder: boolean,
+): AnnualFigures {
+  const { incomes, linkedInvoices, sellerInvoices, expenses, bookkeeperInvoices, receivedBkInvoices } = data
+
+  // earnedAmount = full Wolt gross; amountExVat = worker's share;
+  // owner cut = gross − worker share (already net, so never subtract twice).
+  const allLinkedItems = linkedInvoices.flatMap((i) => i.lineItems)
+  const woltGrossFromSubstitutes = round2(allLinkedItems.reduce((s, li) => s + li.earnedAmount, 0))
+  const ownerCutExVat            = round2(allLinkedItems.reduce((s, li) => s + (li.earnedAmount - li.amountExVat), 0))
+  const ownerCutVat              = round2(allLinkedItems.reduce((s, li) => s + (li.earnedAmount - li.amountExVat) * li.vatRate / 100, 0))
+  const woltOutputVatFromSubs    = round2(allLinkedItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0))
+  const workerCostExVat          = round2(linkedInvoices.reduce((s, i) => s + i.totalExVat, 0))
+  const workerCostVat            = round2(linkedInvoices.reduce((s, i) => s + i.totalVat, 0))
+
+  const bkIncomeExVat = round2(bookkeeperInvoices.reduce((s, i) => s + i.amountExVat, 0))
+  const bkIncomeVat   = round2(bookkeeperInvoices.reduce((s, i) => s + i.vatAmount, 0))
+
+  const totalIncomeExVat = round2(incomes.reduce((s, i) => s + i.totalExVat, 0))
+  const totalIncomeTips  = round2(incomes.reduce((s, i) => s + (i.tipsExVat ?? 0), 0))
+  const totalIncomeVat   = round2(incomes.reduce((s, i) => s + i.vatAmount, 0))
+  const totalIncomeGross = round2(incomes.reduce((s, i) => s + i.totalIncVat, 0))
+
+  const sellerIncomeExVat = round2(sellerInvoices.reduce((s, i) => s + i.totalExVat, 0))
+  const sellerIncomeVat   = round2(sellerInvoices.reduce((s, i) => s + i.totalVat, 0))
+
+  const otherExpExVat = round2(expenses.reduce((s, e) => s + e.amountExVat, 0))
+  const otherExpVat   = round2(expenses.reduce((s, e) => s + e.vatAmount, 0))
+
+  const clientBkFeeInputVat = round2(receivedBkInvoices.reduce((s, i) => s + i.vatAmount, 0))
+
+  const incomeExVat = isAccountHolder
+    ? round2(totalIncomeExVat + totalIncomeTips + ownerCutExVat + bkIncomeExVat)
+    : sellerIncomeExVat
+
+  return {
+    woltGrossFromSubstitutes, ownerCutExVat, ownerCutVat, woltOutputVatFromSubs,
+    workerCostExVat, workerCostVat, bkIncomeExVat, bkIncomeVat,
+    totalIncomeExVat, totalIncomeTips, totalIncomeVat, totalIncomeGross,
+    sellerIncomeExVat, sellerIncomeVat, otherExpExVat, otherExpVat,
+    clientBkFeeInputVat, incomeExVat,
+    netProfit: round2(incomeExVat - otherExpExVat),
+  }
+}

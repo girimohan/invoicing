@@ -23,6 +23,10 @@
     },
     "testMatch": [
       "**/*.test.ts"
+    ],
+    "modulePathIgnorePatterns": [
+      "<rootDir>/.next/",
+      "<rootDir>/dist-electron/"
     ]
   },
   "build": {

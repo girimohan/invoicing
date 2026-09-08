@@ -232,7 +232,7 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
           <p className="text-xs text-gray-400 mt-0.5">Per-worker breakdown · VAT filing · Income tax reference</p>
         </div>
         <a
-          href="/"
+          href="/tools/invoice-generator"
           className="bg-blue-700 text-white text-xs px-4 py-2 rounded font-semibold hover:bg-blue-800"
         >
           + New Invoice
@@ -280,7 +280,7 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
       {yearInvoices.length === 0 ? (
         <div className="text-center py-16 text-gray-400 text-sm">
           No invoices for {selectedYear} yet.{' '}
-          <a href="/" className="text-blue-600 hover:underline">Create one →</a>
+          <a href="/tools/invoice-generator" className="text-blue-600 hover:underline">Create one →</a>
         </div>
       ) : viewMode === 'worker' ? (
         <>
@@ -451,7 +451,7 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                                           PDF
                                         </a>
                                         <a
-                                          href={`/?edit=${inv.id}`}
+                                          href={`/tools/invoice-generator?edit=${inv.id}`}
                                           className="text-amber-600 hover:underline"
                                         >
                                           Edit

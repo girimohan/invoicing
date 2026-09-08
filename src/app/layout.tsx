@@ -4,7 +4,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Barmo Bookkeeping',
-  description: 'Finnish invoicing tool for Wolt self-billing invoices',
+  description: 'Finnish VAT and income tax bookkeeping for platform-work sole traders',
 }
 
 export default function RootLayout({
@@ -14,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="fi">
-      <body className="bg-gray-100 text-gray-900 text-sm flex min-h-screen">
+      <body className="bg-canvas text-slate-800 text-sm font-sans flex min-h-screen antialiased">
         <Sidebar />
         <main className="flex-1 min-h-screen overflow-auto">
           {children}

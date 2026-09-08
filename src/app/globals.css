@@ -2,10 +2,28 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Base
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 *,
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Money and dates must line up column-to-column; proportional digits make
+   tables of figures impossible to scan. */
+.num,
+table td.num,
+table th.num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
 }
 
 /* Remove number input spinners */
@@ -18,27 +36,235 @@ input[type='number'] {
   -moz-appearance: textfield;
 }
 
-/* Compact form controls */
-.field {
-  @apply flex flex-col gap-0.5;
+/* Desktop-app scrollbars — slimmer and quieter than the OS default */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
 }
-.field label {
-  @apply text-xs font-medium text-gray-500 uppercase tracking-wide;
+::-webkit-scrollbar-track {
+  background: transparent;
 }
-.field input,
-.field textarea,
-.field select {
-  @apply border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white;
+::-webkit-scrollbar-thumb {
+  background: rgb(203 213 225);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 9999px;
 }
-.field input.readonly,
-.field input[readonly] {
-  @apply bg-gray-50 text-gray-600 cursor-default;
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(148 163 184);
+  border: 2px solid transparent;
+  background-clip: content-box;
 }
 
-/* Section heading inside the form */
-.form-section {
-  @apply mb-6;
-}
-.form-section-title {
-  @apply text-xs font-bold uppercase tracking-widest text-gray-400 border-b border-gray-200 pb-1 mb-3;
+/* ═══════════════════════════════════════════════════════════════════════════
+   Components
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@layer components {
+  /* ── Page scaffolding ───────────────────────────────────────────────────── */
+
+  .page {
+    @apply px-8 py-7 max-w-[1180px] mx-auto;
+  }
+
+  .page-header {
+    @apply flex items-start justify-between gap-6 mb-6;
+  }
+
+  .page-title {
+    @apply text-[19px] font-semibold text-slate-900 tracking-[-0.01em] leading-tight;
+  }
+
+  .page-subtitle {
+    @apply text-[12px] text-slate-500 mt-1 leading-relaxed;
+  }
+
+  .section-title {
+    @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400;
+  }
+
+  /* ── Cards ──────────────────────────────────────────────────────────────── */
+
+  .card {
+    @apply bg-white border border-slate-200/80 rounded-xl shadow-card;
+  }
+
+  .card-pad {
+    @apply px-5 py-4;
+  }
+
+  .card-header {
+    @apply px-5 py-3.5 border-b border-slate-200/70 flex items-center justify-between gap-4;
+  }
+
+  .card-title {
+    @apply text-[13px] font-semibold text-slate-800;
+  }
+
+  .card-hint {
+    @apply text-[11px] text-slate-400 mt-0.5;
+  }
+
+  /* ── Stat tiles ─────────────────────────────────────────────────────────── */
+
+  .stat {
+    @apply bg-white border border-slate-200/80 rounded-xl shadow-card px-4 py-3.5;
+  }
+
+  .stat-label {
+    @apply text-[10px] font-semibold uppercase tracking-[0.07em] text-slate-400;
+  }
+
+  .stat-value {
+    @apply text-[22px] font-semibold text-slate-900 leading-none mt-2 tracking-[-0.02em];
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat-note {
+    @apply text-[11px] text-slate-400 mt-1.5;
+  }
+
+  /* ── Buttons ────────────────────────────────────────────────────────────── */
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg text-[12px] font-semibold
+           px-3.5 py-2 transition-colors duration-150 whitespace-nowrap
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1
+           disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primary {
+    @apply btn bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 active:bg-indigo-800;
+  }
+
+  .btn-secondary {
+    @apply btn bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 hover:border-slate-400;
+  }
+
+  .btn-ghost {
+    @apply btn text-slate-500 hover:text-slate-800 hover:bg-slate-100;
+  }
+
+  .btn-danger {
+    @apply btn bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 hover:border-rose-300;
+  }
+
+  .btn-sm {
+    @apply px-2.5 py-1 text-[11px] rounded-md;
+  }
+
+  /* ── Segmented control (year / period / frequency switchers) ────────────── */
+
+  .segmented {
+    @apply inline-flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5;
+  }
+
+  .segmented-item {
+    @apply px-3 py-1.5 rounded-[6px] text-[12px] font-semibold text-slate-500
+           transition-colors duration-150 hover:text-slate-800;
+  }
+
+  .segmented-item-active {
+    @apply bg-white text-slate-900 shadow-sm;
+  }
+
+  /* ── Pills / status badges ──────────────────────────────────────────────── */
+
+  .pill {
+    @apply inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full
+           whitespace-nowrap;
+  }
+
+  .pill-neutral { @apply pill bg-slate-100 text-slate-600; }
+  .pill-info    { @apply pill bg-sky-50 text-sky-700 ring-1 ring-inset ring-sky-200/70; }
+  .pill-warn    { @apply pill bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200/70; }
+  .pill-danger  { @apply pill bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-200/70; }
+  .pill-success { @apply pill bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-200/70; }
+
+  /* ── Data tables ────────────────────────────────────────────────────────── */
+
+  .data-table {
+    @apply w-full text-[12.5px] border-collapse;
+  }
+
+  .data-table thead th {
+    @apply px-4 py-2.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-slate-400
+           bg-slate-50/80 border-b border-slate-200 text-left;
+  }
+
+  .data-table tbody td {
+    @apply px-4 py-3 border-b border-slate-100 text-slate-700 align-middle;
+  }
+
+  .data-table tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .data-table tbody tr.row-link {
+    @apply transition-colors duration-150 hover:bg-indigo-50/50 cursor-pointer;
+  }
+
+  .data-table tfoot td {
+    @apply px-4 py-3.5 bg-slate-50/80 border-t border-slate-200 font-semibold text-slate-800;
+  }
+
+  .cell-num {
+    @apply text-right font-mono text-slate-600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Form controls ──────────────────────────────────────────────────────── */
+
+  .field {
+    @apply flex flex-col gap-1;
+  }
+
+  .field label {
+    @apply text-[10px] font-semibold text-slate-500 uppercase tracking-[0.06em];
+  }
+
+  .field input,
+  .field textarea,
+  .field select {
+    @apply border border-slate-300 rounded-lg px-2.5 py-1.5 text-[13px] text-slate-800 bg-white
+           transition-colors duration-150
+           placeholder:text-slate-300
+           focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500;
+  }
+
+  .field input.readonly,
+  .field input[readonly] {
+    @apply bg-slate-50 text-slate-500 cursor-default focus:ring-0 focus:border-slate-300;
+  }
+
+  /* Section heading inside a form */
+  .form-section {
+    @apply mb-7;
+  }
+
+  .form-section-title {
+    @apply text-[11px] font-semibold uppercase tracking-[0.08em] text-slate-400
+           border-b border-slate-200 pb-1.5 mb-3;
+  }
+
+  /* ── Inline notices ─────────────────────────────────────────────────────── */
+
+  .notice {
+    @apply text-[12px] rounded-lg border px-3.5 py-2.5;
+  }
+
+  .notice-error   { @apply notice bg-rose-50 border-rose-200 text-rose-700; }
+  .notice-success { @apply notice bg-emerald-50 border-emerald-200 text-emerald-700; }
+  .notice-info    { @apply notice bg-indigo-50 border-indigo-200 text-indigo-700; }
+  .notice-warn    { @apply notice bg-amber-50 border-amber-200 text-amber-800; }
+
+  /* ── Empty states ───────────────────────────────────────────────────────── */
+
+  .empty-state {
+    @apply text-center py-16 px-6 text-slate-400;
+  }
+
+  .empty-state-title {
+    @apply text-[13px] font-semibold text-slate-500 mb-1;
+  }
 }

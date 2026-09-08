@@ -1,10 +1,13 @@
-import { getNextInvoiceNumber, getInvoice } from '@/actions/invoice'
-import InvoiceApp from '@/components/InvoiceApp'
+import { getDashboardSummary } from '@/actions/dashboard'
+import Dashboard from '@/components/Dashboard'
 
-export default async function Home({ searchParams }: { searchParams: { edit?: string } }) {
-  const editId = searchParams.edit ?? null
-  const editInvoice = editId ? await getInvoice(editId) : null
-  const initialInvoiceNumber = editInvoice?.invoiceNumber ?? await getNextInvoiceNumber()
+export const dynamic = 'force-dynamic'
 
-  return <InvoiceApp initialInvoiceNumber={initialInvoiceNumber} editInvoice={editInvoice} />
+export default async function Home({ searchParams }: { searchParams: { year?: string } }) {
+  const currentYear = new Date().getFullYear()
+  const year = parseInt(searchParams.year ?? '') || currentYear
+  const years = Array.from({ length: 3 }, (_, i) => currentYear - i)
+  const { clients } = await getDashboardSummary(year)
+
+  return <Dashboard clients={clients} year={year} years={years} />
 }

@@ -81,8 +81,10 @@ function formatIbanDisplay(raw: string) {
 
 export default function BookkeeperInvoiceApp({
   initialInvoiceNumber,
+  initialClientId = null,
 }: {
   initialInvoiceNumber: string
+  initialClientId?: number | null
 }) {
   const [bk, setBk] = useState<BkDetails>(emptyBk)
   const [clients, setClients] = useState<ClientOption[]>([])
@@ -125,6 +127,17 @@ export default function BookkeeperInvoiceApp({
     getClients().then((list) => setClients(list as ClientOption[])).catch(() => {})
     getBookkeeperInvoices().then((list) => setHistory(list as BookkeeperInvoice[])).catch(() => {})
   }, [])
+
+  // Preselect the client passed in the URL (?client=) once the list has loaded —
+  // selectClient is reused so the invoice number picks up their display ID.
+  const [preselected, setPreselected] = useState(false)
+  useEffect(() => {
+    if (preselected || initialClientId === null || clients.length === 0) return
+    if (!clients.some((c) => c.id === initialClientId)) return
+    setPreselected(true)
+    selectClient(initialClientId)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clients, initialClientId, preselected])
 
   // Persist bookkeeper details to localStorage whenever they change
   function setBkField(field: keyof BkDetails, value: string) {
@@ -330,55 +343,49 @@ export default function BookkeeperInvoiceApp({
   return (
     <div className="flex h-[calc(100vh-36px)]">
       {/* ── LEFT: Form ── */}
-      <div className="w-[55%] overflow-y-auto bg-white">
+      <div className="w-[55%] overflow-y-auto bg-white border-r border-slate-200">
         <form onSubmit={handleSubmit} noValidate>
           {/* Sticky header */}
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
-            <div>
-              <h1 className="font-bold text-base">
-                {editingId ? '✎ Edit Bookkeeper Invoice' : 'Bookkeeper Invoice'}
+          <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between gap-4 sticky top-0 bg-white/95 backdrop-blur z-10">
+            <div className="min-w-0">
+              <h1 className="page-title">
+                {editingId ? 'Edit Service Invoice' : 'Service Invoice'}
               </h1>
-              <p className="text-[10px] text-gray-400">
+              <p className="page-subtitle">
                 {editingId
-                  ? <span className="text-amber-600 font-semibold">Editing existing invoice — changes will overwrite the saved record</span>
-                  : 'Create an invoice for your bookkeeping services'}
+                  ? <span className="text-amber-600 font-semibold">Editing a saved invoice — saving overwrites the existing record</span>
+                  : 'Bill a client for bookkeeping and tax filing services'}
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 shrink-0">
               {editingId && (
-                <button
-                  type="button"
-                  onClick={handleCancelEdit}
-                  className="bg-gray-200 text-gray-700 text-xs px-3 py-1.5 rounded font-semibold hover:bg-gray-300"
-                >
-                  Cancel Edit
+                <button type="button" onClick={handleCancelEdit} className="btn-secondary">
+                  Cancel edit
                 </button>
               )}
               <button
                 type="submit"
                 disabled={submitting}
-                className={`text-white text-xs px-4 py-1.5 rounded font-semibold disabled:opacity-50 ${
-                  editingId ? 'bg-amber-600 hover:bg-amber-700' : 'bg-indigo-700 hover:bg-indigo-800'
-                }`}
+                className={editingId ? 'btn bg-amber-600 text-white hover:bg-amber-700' : 'btn-primary'}
               >
-                {submitting ? 'Saving…' : editingId ? 'Update Invoice' : 'Save & Generate Invoice'}
+                {submitting ? 'Saving…' : editingId ? 'Update invoice' : 'Save & generate invoice'}
               </button>
             </div>
           </div>
 
           {error && (
-            <div className="mx-6 mt-3 text-xs text-red-700 bg-red-50 border border-red-200 px-3 py-2 rounded">{error}</div>
+            <div className="mx-6 mt-3 notice-error">{error}</div>
           )}
           {successMsg && (
-            <div className="mx-6 mt-3 text-xs text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded">{successMsg}</div>
+            <div className="mx-6 mt-3 notice-success">{successMsg}</div>
           )}
           {savedId && (
-            <div className="mx-6 mt-3 text-xs text-indigo-700 bg-indigo-50 border border-indigo-200 px-3 py-2 rounded flex items-center justify-between">
+            <div className="mx-6 mt-3 notice-info flex items-center justify-between">
               <span>Last saved invoice ready</span>
               <a
                 href={`/api/bookkeeper-invoice/${savedId}/pdf`}
                 target="_blank"
-                className="ml-3 bg-indigo-700 text-white px-3 py-1 rounded text-xs font-semibold hover:bg-indigo-800"
+                className="btn-primary btn-sm ml-3"
               >
                 Download PDF
               </a>
@@ -717,7 +724,7 @@ export default function BookkeeperInvoiceApp({
         {/* Invoice History */}
         {history.length > 0 && (
           <div className="mx-4 mb-6">
-            <h2 className="text-xs font-bold text-gray-700 mb-2">Past Bookkeeper Invoices</h2>
+            <h2 className="section-title mb-2">Past service invoices</h2>
             <div className="bg-white rounded shadow-sm overflow-hidden">
               <table className="w-full text-[10px]">
                 <thead>

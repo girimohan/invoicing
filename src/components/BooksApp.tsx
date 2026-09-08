@@ -12,7 +12,7 @@ import {
 } from '@/actions/owner-books'
 import { round2, formatCurrency as fmt } from '@/lib/calculations'
 import {
-  computeMonths, computePeriods, MONTH_NAMES,
+  computeMonths, computePeriods, computeAnnualFigures, MONTH_NAMES,
   type IncomePeriod, type Expense, type LinkedInvoice, type BookkeeperInvoice,
   type ReceivedBkInvoice, type VatFilingFrequency, type MonthVat, type VatPeriod,
 } from '@/lib/vat-report'
@@ -239,9 +239,13 @@ function MonthItemization({ mo, isAccountHolder }: { mo: MonthVat; isAccountHold
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function BooksApp({ initialClients }: { initialClients: Client[] }) {
-  const [selectedClientId, setSelectedClientId] = useState<number | null>(null)
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
+export default function BooksApp({ initialClients, initialClientId = null, initialYear }: {
+  initialClients: Client[]
+  initialClientId?: number | null
+  initialYear?: number
+}) {
+  const [selectedClientId, setSelectedClientId] = useState<number | null>(initialClientId)
+  const [selectedYear, setSelectedYear] = useState(initialYear ?? new Date().getFullYear())
   const [activeTab, setActiveTab] = useState<Tab>('income')
   const [loading, setLoading] = useState(false)
   const [incomes, setIncomes] = useState<IncomePeriod[]>([])
@@ -313,45 +317,22 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
   const selectedClient = initialClients.find((c) => c.id === selectedClientId)
   const isAccountHolder = selectedClient?.role !== 'SUBSTITUTE_WORKER'
 
-  // ── Substitute-period income calculations (account holder only) ───────────
-  // earnedAmount = full Wolt gross; amountExVat = worker's share; owner cut = gross - worker
-  const allLinkedItems = linkedInvoices.flatMap(i => i.lineItems)
-  const woltGrossFromSubstitutes = round2(allLinkedItems.reduce((s, li) => s + li.earnedAmount, 0))
-  const ownerCutExVat            = round2(allLinkedItems.reduce((s, li) => s + (li.earnedAmount - li.amountExVat), 0))
-  const ownerCutVat              = round2(allLinkedItems.reduce((s, li) => s + (li.earnedAmount - li.amountExVat) * li.vatRate / 100, 0))
-  const woltOutputVatFromSubs    = round2(allLinkedItems.reduce((s, li) => s + li.earnedAmount * li.vatRate / 100, 0))
-  const workerCostExVat          = round2(linkedInvoices.reduce((s, i) => s + i.totalExVat, 0))
-  const workerCostVat            = round2(linkedInvoices.reduce((s, i) => s + i.totalVat, 0))
-
-  // ── Bookkeeper invoice income (Mohan's bookkeeping fees to clients) ───────────────────
-  const bkIncomeExVat = round2(bookkeeperInvoices.reduce((s, i) => s + i.amountExVat, 0))
-  const bkIncomeVat   = round2(bookkeeperInvoices.reduce((s, i) => s + i.vatAmount, 0))
-
-  // ── Manual own-work income (account holders, periods they personally delivered) ──
-  const totalIncomeExVat  = round2(incomes.reduce((s, i) => s + i.totalExVat, 0))
-  const totalIncomeTips   = round2(incomes.reduce((s, i) => s + (i.tipsExVat ?? 0), 0))
-  const totalIncomeVat    = round2(incomes.reduce((s, i) => s + i.vatAmount, 0))
-  // totalIncVat already includes tips (stored correctly in DB)
-  const totalIncomeGross  = round2(incomes.reduce((s, i) => s + i.totalIncVat, 0))
-
-  // ── Substitute worker invoice income ──────────────────────────────────────
-  const sellerIncomeExVat = round2(sellerInvoices.reduce((s, i) => s + i.totalExVat, 0))
-  const sellerIncomeVat   = round2(sellerInvoices.reduce((s, i) => s + i.totalVat, 0))
-
-  const otherExpExVat = round2(expenses.reduce((s, e) => s + e.amountExVat, 0))
-  const otherExpVat   = round2(expenses.reduce((s, e) => s + e.vatAmount, 0))
-
-  // incomeExVat: account holder = own Wolt fees + tips + net owner cut + bookkeeping fees
-  //              substitute     = invoice income
-  // ownerCutExVat already NETS out the worker payment, so NO double subtraction
-  const incomeExVat = isAccountHolder
-    ? round2(totalIncomeExVat + totalIncomeTips + ownerCutExVat + bkIncomeExVat)
-    : sellerIncomeExVat
-
-  const netProfit = round2(incomeExVat - otherExpExVat)
-
-  // ── Bookkeeper fees received by this client (their INPUT VAT, deductible) ──
-  const clientBkFeeInputVat = round2(receivedBkInvoices.reduce((s, i) => s + i.vatAmount, 0))
+  // ── Income tax reference figures ──────────────────────────────────────────
+  // Computed by the shared helper in lib/vat-report so the Filing Guide quotes
+  // exactly the same numbers as this screen.
+  const {
+    woltGrossFromSubstitutes, ownerCutExVat, ownerCutVat, woltOutputVatFromSubs,
+    workerCostExVat, workerCostVat, bkIncomeExVat, bkIncomeVat,
+    totalIncomeExVat, totalIncomeTips, totalIncomeVat, totalIncomeGross,
+    sellerIncomeExVat, sellerIncomeVat, otherExpExVat, otherExpVat,
+    clientBkFeeInputVat, incomeExVat, netProfit,
+  } = useMemo(
+    () => computeAnnualFigures(
+      { incomes, linkedInvoices, sellerInvoices, expenses, bookkeeperInvoices, receivedBkInvoices },
+      isAccountHolder,
+    ),
+    [incomes, linkedInvoices, sellerInvoices, expenses, bookkeeperInvoices, receivedBkInvoices, isAccountHolder],
+  )
 
   // VAT filing:
   // Account holder output = VAT on own Wolt income + VAT on FULL Wolt gross for sub periods + bookkeeping VAT (if this client IS the bookkeeper)
@@ -911,7 +892,7 @@ export default function BooksApp({ initialClients }: { initialClients: Client[] 
               {sellerInvoices.length === 0 ? (
                 <div className="text-center py-12 text-gray-400 text-sm bg-white border border-gray-200 rounded-lg">
                   <div className="font-medium mb-1">No invoices for {selectedYear}</div>
-                  <div className="text-xs">Create an invoice from the <a href="/" className="text-blue-600 hover:underline">New Invoice</a> page and select this worker as seller.</div>
+                  <div className="text-xs">Create an invoice from the <a href="/tools/invoice-generator" className="text-blue-600 hover:underline">invoice generator</a> page and select this worker as seller.</div>
                 </div>
               ) : (
                 <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
