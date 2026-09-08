@@ -74,10 +74,17 @@ It only does this if the file is **missing or 0 bytes** — so existing data is 
 
 `seed.db` = schema-only SQLite file (all tables, no rows). It is committed to git and bundled in the installer via `extraResources` in `package.json`.
 
-> **If you change the schema**, you must regenerate `seed.db` after running migrations:
+> **If you change the schema**, you must regenerate `seed.db` after running migrations.
+> Build it **empty from the migrations** — do NOT copy `dev.db`, which contains
+> real client data that would then ship inside the installer:
 > ```powershell
-> Copy-Item "prisma\dev.db" "prisma\seed.db"
-> npx prisma migrate deploy --schema prisma/schema.prisma
+> Remove-Item "prisma\seed.db"
+> $env:DATABASE_URL = "file:./seed.db"   # resolved relative to prisma/
+> npx prisma migrate deploy
+> ```
+> Verify it is schema-only before committing — every table should report 0 rows:
+> ```powershell
+> python -c "import sqlite3;c=sqlite3.connect('prisma/seed.db');print([(t[0],c.execute('SELECT COUNT(*) FROM \"%s\"'%t[0]).fetchone()[0]) for t in c.execute(\"SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_prisma%'\")])"
 > ```
 > Then commit the new `seed.db`.
 
@@ -85,8 +92,11 @@ It only does this if the file is **missing or 0 bytes** — so existing data is 
 
 ## Adding a Schema Migration
 
-1. Edit `prisma/schema.prisma`
-2. Run `npx prisma migrate dev --name describe_your_change` (uses dev.db)
+1. Edit `prisma/schema.prisma`, then `npx prisma format`
+2. Run `npx prisma migrate dev --name describe_your_change` (uses dev.db).
+   In a non-interactive shell this fails — hand-write
+   `prisma/migrations/<timestamp>_<name>/migration.sql` instead and apply it
+   with `npx prisma migrate deploy`, then `npx prisma generate`.
 3. Verify the app works in dev mode
 4. Update `seed.db` with the new schema (see above)
 5. Rebuild: `npm run electron:build`

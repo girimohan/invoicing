@@ -10,6 +10,7 @@ import {
 import type { ClientDashboardRow, MonthTotals } from '@/actions/dashboard'
 import AddIncomeDialog from '@/components/AddIncomeDialog'
 import ClientDialog, { type EditableClient } from '@/components/ClientDialog'
+import { assessCorrection } from '@/lib/vat-filing'
 
 // Shared with BooksApp so the two screens always agree on filing frequency.
 const VAT_FREQ_STORAGE_KEY = 'books_vat_filing_freq'
@@ -26,6 +27,23 @@ function sumPeriod(months: MonthTotals[], p: VatPeriodBounds) {
     // Months in the period with no income recorded — the gaps still to enter.
     gaps: inRange.filter((m) => m.incomeExVat === 0 && m.outVat === 0).map((m) => m.m),
   }
+}
+
+type FilingStatus =
+  | { kind: 'not-filed' }
+  | { kind: 'filed' }
+  | { kind: 'diverged'; route: 'next-return' | 'replacement'; difference: number }
+
+/** Compare the filed snapshot for this period against the live net VAT. */
+function filingStatus(row: ClientDashboardRow, p: VatPeriodBounds, currentNet: number): FilingStatus {
+  const filed = row.filings.find((f) => f.periodKey === p.key)
+  if (!filed) return { kind: 'not-filed' }
+  const a = assessCorrection(
+    { netVat: filed.netVat, filedOn: new Date(filed.filedOn), dueDate: new Date(filed.dueDate), year: p.year },
+    currentNet,
+  )
+  if (a.route === 'none') return { kind: 'filed' }
+  return { kind: 'diverged', route: a.route, difference: a.difference }
 }
 
 function isBilledFor(row: ClientDashboardRow, p: VatPeriodBounds): boolean {
@@ -64,7 +82,10 @@ export default function Dashboard({ clients, records, nextDisplayId, year, years
   useEffect(() => { setDays(daysUntil(period.dueDate)) }, [period.dueDate])
 
   const rows = useMemo(
-    () => clients.map((c) => ({ client: c, f: sumPeriod(c.months, period), billed: isBilledFor(c, period) })),
+    () => clients.map((c) => {
+      const f = sumPeriod(c.months, period)
+      return { client: c, f, billed: isBilledFor(c, period), filing: filingStatus(c, period, f.net) }
+    }),
     [clients, period],
   )
 
@@ -74,6 +95,7 @@ export default function Dashboard({ clients, records, nextDisplayId, year, years
   const past    = rows.filter((r) => r.client.role === 'SUBSTITUTE_WORKER' && !r.f.hasData)
 
   const needEntries = current.filter((r) => r.f.gaps.length > 0).length
+  const needsCorrection = current.filter((r) => r.filing.kind === 'diverged')
   const overdue = days !== null && days < 0
   const soon    = days !== null && days >= 0 && days <= 14
 
@@ -91,6 +113,7 @@ export default function Dashboard({ clients, records, nextDisplayId, year, years
             {days === null ? '' : overdue ? ` — overdue by ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'}`
               : days === 0 ? ' — today' : ` — in ${days} day${days === 1 ? '' : 's'}`}
             {needEntries > 0 && ` · ${needEntries} still need entries`}
+            {needsCorrection.length > 0 && ` · ${needsCorrection.length} changed since filing`}
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -140,12 +163,13 @@ export default function Dashboard({ clients, records, nextDisplayId, year, years
                 <th className="text-right">Turnover</th>
                 <th className="text-right">Net VAT</th>
                 <th>Entries</th>
+                <th>Filing</th>
                 <th className="text-center">Fee</th>
                 <th />
               </tr>
             </thead>
             <tbody>
-              {current.map(({ client, f, billed }) => (
+              {current.map(({ client, f, billed, filing }) => (
                 <tr key={client.id} className="row-link">
                   <td>
                     <a href={`/books?client=${client.id}&year=${year}`} className="group flex items-center gap-2">
@@ -161,6 +185,17 @@ export default function Dashboard({ clients, records, nextDisplayId, year, years
                     {f.gaps.length === 0
                       ? <span className="pill-success">complete</span>
                       : <span className="pill-warn">{f.gaps.map((m) => MONTH_ABBR[m]).join(', ')} missing</span>}
+                  </td>
+                  <td>
+                    {filing.kind === 'not-filed' ? <span className="pill-neutral">not filed</span>
+                      : filing.kind === 'filed' ? <span className="pill-success">filed</span>
+                      : (
+                        <a href="/filing" className={filing.route === 'replacement' ? 'pill-danger' : 'pill-warn'}
+                          title={`Filed figure differs by ${filing.difference.toFixed(2)} € — ${
+                            filing.route === 'replacement' ? 'needs a replacement return' : 'carry into the next return'}`}>
+                          changed since filed
+                        </a>
+                      )}
                   </td>
                   <td className="text-center">
                     {billed

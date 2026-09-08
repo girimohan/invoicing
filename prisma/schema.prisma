@@ -8,58 +8,58 @@ datasource db {
 }
 
 model Invoice {
-  id              String   @id @default(cuid())
-  invoiceNumber   String   @unique
-  invoiceDate     DateTime
-  dueDate         DateTime
-  paymentTerms    String   @default("14 pv netto / 14 days net")
-  periodStart     DateTime
-  periodEnd       DateTime
+  id            String   @id @default(cuid())
+  invoiceNumber String   @unique
+  invoiceDate   DateTime
+  dueDate       DateTime
+  paymentTerms  String   @default("14 pv netto / 14 days net")
+  periodStart   DateTime
+  periodEnd     DateTime
 
   // Seller (substitute worker)
-  sellerName        String
-  sellerAddress     String
-  sellerPostalCode  String
-  sellerCity        String
-  sellerBusinessId  String
-  sellerVatId       String
-  sellerIban        String
-  sellerBic         String
-  sellerEmail       String?
-  sellerPhone       String?
+  sellerName       String
+  sellerAddress    String
+  sellerPostalCode String
+  sellerCity       String
+  sellerBusinessId String
+  sellerVatId      String
+  sellerIban       String
+  sellerBic        String
+  sellerEmail      String?
+  sellerPhone      String?
 
   // Buyer (Wolt)
-  buyerName         String
-  buyerAddress      String
-  buyerPostalCode   String
-  buyerCity         String
-  buyerBusinessId   String
-  buyerVatId        String
+  buyerName       String
+  buyerAddress    String
+  buyerPostalCode String
+  buyerCity       String
+  buyerBusinessId String
+  buyerVatId      String
 
   // Reference to original Wolt self-billing invoice
   woltInvoiceNumber String?
   woltInvoiceDate   DateTime?
 
   // Seller client link (substitute worker)
-  clientId      Int?
-  client        Client?   @relation("SellerInvoices", fields: [clientId], references: [id], onDelete: SetNull)
+  clientId Int?
+  client   Client? @relation("SellerInvoices", fields: [clientId], references: [id], onDelete: SetNull)
 
   // Buyer client link (account holder — if they are a bookkeeping client)
   buyerClientId Int?
-  buyerClient   Client?   @relation("BuyerInvoices", fields: [buyerClientId], references: [id], onDelete: SetNull)
+  buyerClient   Client? @relation("BuyerInvoices", fields: [buyerClientId], references: [id], onDelete: SetNull)
 
   // Computed totals (stored for fast retrieval)
-  totalExVat      Float
-  totalVat        Float
-  totalIncVat     Float
+  totalExVat  Float
+  totalVat    Float
+  totalIncVat Float
 
-  notes           String?
+  notes String?
 
-  lineItems       LineItem[]
-  reference       InvoiceReference?
+  lineItems LineItem[]
+  reference InvoiceReference?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([invoiceDate])
   @@index([periodEnd])
@@ -77,119 +77,120 @@ model InvoiceReference {
   baseNumber         String
   checkDigit         String
   formattedReference String   @unique
-  referenceType      String   // 'domestic' | 'rf'
+  referenceType      String // 'domestic' | 'rf'
   generatedAt        DateTime @default(now())
 }
 
 model Client {
-  id           Int       @id @default(autoincrement())
-  displayId    String    @unique  // "101", "102", etc. — bookkeeper-assigned
-  role         String    @default("ACCOUNT_HOLDER") // "SUBSTITUTE_WORKER" | "ACCOUNT_HOLDER"
-  name         String
-  businessId   String?
-  vatId        String?
-  address      String?
-  postalCode   String?
-  city         String?
-  email        String?
-  phone        String?
-  iban         String?
-  bic          String?
-  notes         String?
+  id         Int     @id @default(autoincrement())
+  displayId  String  @unique // "101", "102", etc. — bookkeeper-assigned
+  role       String  @default("ACCOUNT_HOLDER") // "SUBSTITUTE_WORKER" | "ACCOUNT_HOLDER"
+  name       String
+  businessId String?
+  vatId      String?
+  address    String?
+  postalCode String?
+  city       String?
+  email      String?
+  phone      String?
+  iban       String?
+  bic        String?
+  notes      String?
 
   // Share preference for substitute worker invoices
-  shareType          String  @default("PERCENT") // "PERCENT" | "AMOUNT"
-  defaultSharePercent Float?  // e.g. 75 → worker gets 75% of Wolt gross
-  defaultShareAmount  Float?  // e.g. 250 → worker gets flat 250 € per line item
+  shareType           String @default("PERCENT") // "PERCENT" | "AMOUNT"
+  defaultSharePercent Float? // e.g. 75 → worker gets 75% of Wolt gross
+  defaultShareAmount  Float? // e.g. 250 → worker gets flat 250 € per line item
 
   invoices      Invoice[]           @relation("SellerInvoices")
   buyerInvoices Invoice[]           @relation("BuyerInvoices")
   incomePeriods OwnerIncomePeriod[]
   expenses      OwnerExpense[]
+  vatFilings    VatFiling[]
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 // ── Owner income period (Wolt self-billing amounts per pay period) ──────────
 model OwnerIncomePeriod {
-  id             String   @id @default(cuid())
-  clientId       Int
-  client         Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  clientId Int
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
   periodStart    DateTime
   periodEnd      DateTime
   description    String?
-  woltInvoiceRef String?   // e.g. FIN/26/3111862-6/1/1
+  woltInvoiceRef String? // e.g. FIN/26/3111862-6/1/1
 
-  totalExVat     Float
-  tipsExVat      Float    @default(0)  // Tips income (0% VAT) for the same period
-  vatRate        Float    @default(25.5)
-  vatAmount      Float
-  totalIncVat    Float
+  totalExVat  Float
+  tipsExVat   Float @default(0) // Tips income (0% VAT) for the same period
+  vatRate     Float @default(25.5)
+  vatAmount   Float
+  totalIncVat Float
 
-  notes          String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([periodStart])
 }
 
 // ── Owner business expense entry ─────────────────────────────────────────────
 model OwnerExpense {
-  id           String   @id @default(cuid())
-  clientId     Int
-  client       Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  id       String @id @default(cuid())
+  clientId Int
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
-  date         DateTime
-  description  String
-  supplier     String?
-  category     String   @default("OTHER") // MATERIALS|TRAVEL|PHONE_INTERNET|EQUIPMENT|VEHICLE|MARKETING|OFFICE|BOOKKEEPING|OTHER
+  date        DateTime
+  description String
+  supplier    String?
+  category    String   @default("OTHER") // MATERIALS|TRAVEL|PHONE_INTERNET|EQUIPMENT|VEHICLE|MARKETING|OFFICE|BOOKKEEPING|OTHER
 
-  amountExVat  Float
-  vatRate      Float    @default(25.5)
-  vatAmount    Float
-  totalAmount  Float
+  amountExVat Float
+  vatRate     Float @default(25.5)
+  vatAmount   Float
+  totalAmount Float
 
-  receiptRef   String?
-  notes        String?
+  receiptRef String?
+  notes      String?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([date])
 }
 
 model BookkeeperInvoice {
-  id              String   @id @default(cuid())
-  invoiceNumber   String   @unique
-  issueDate       DateTime
-  dueDate         DateTime
-  paymentTerms    String   @default("14 pv netto / 14 days net")
-  periodStart     DateTime
-  periodEnd       DateTime
+  id            String   @id @default(cuid())
+  invoiceNumber String   @unique
+  issueDate     DateTime
+  dueDate       DateTime
+  paymentTerms  String   @default("14 pv netto / 14 days net")
+  periodStart   DateTime
+  periodEnd     DateTime
 
   // Bookkeeper (seller) details
-  bkName          String
-  bkBusinessId    String
-  bkVatId         String
-  bkAddress       String
-  bkPostalCode    String
-  bkCity          String
-  bkIban          String
-  bkBic           String
-  bkEmail         String?
-  bkPhone         String?
+  bkName       String
+  bkBusinessId String
+  bkVatId      String
+  bkAddress    String
+  bkPostalCode String
+  bkCity       String
+  bkIban       String
+  bkBic        String
+  bkEmail      String?
+  bkPhone      String?
 
   // Client (buyer) snapshot at time of invoice
-  clientId        Int?
-  clientName      String
+  clientId         Int?
+  clientName       String
   clientBusinessId String?
-  clientVatId     String?
-  clientAddress   String?
+  clientVatId      String?
+  clientAddress    String?
   clientPostalCode String?
-  clientCity      String?
-  clientEmail     String?
+  clientCity       String?
+  clientEmail      String?
 
   // Service line
   serviceDescription String
@@ -198,10 +199,10 @@ model BookkeeperInvoice {
   vatAmount          Float
   totalIncVat        Float
 
-  notes           String?
+  notes String?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([periodEnd])
   @@index([issueDate])
@@ -210,22 +211,57 @@ model BookkeeperInvoice {
 }
 
 model LineItem {
-  id          String  @id @default(cuid())
-  invoiceId   String
-  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  sortOrder   Int     @default(0)
+  id        String  @id @default(cuid())
+  invoiceId String
+  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sortOrder Int     @default(0)
 
   description  String
-  earnedAmount Float   @default(0)   // Gross amount from Wolt (excl. VAT)
-  sharePercent Float   @default(100) // % of work done by this worker
-  vatRate      Float                 // VAT rate as percentage (e.g. 25.5, 0)
+  earnedAmount Float  @default(0) // Gross amount from Wolt (excl. VAT)
+  sharePercent Float  @default(100) // % of work done by this worker
+  vatRate      Float // VAT rate as percentage (e.g. 25.5, 0)
 
   // Share type (mirrors Client.shareType at time of invoice creation)
-  shareType   String  @default("PERCENT") // "PERCENT" | "AMOUNT"
-  shareAmount Float   @default(0)         // flat € amount (used when shareType = "AMOUNT")
+  shareType   String @default("PERCENT") // "PERCENT" | "AMOUNT"
+  shareAmount Float  @default(0) // flat € amount (used when shareType = "AMOUNT")
 
   // Stored computed values
-  amountExVat Float   // earnedAmount × sharePercent/100  OR  shareAmount directly
+  amountExVat Float // earnedAmount × sharePercent/100  OR  shareAmount directly
   vatAmount   Float
   totalAmount Float
+}
+
+// ── VAT filing record ────────────────────────────────────────────────────────
+// What was actually filed to Verohallinto for one client and one VAT period.
+// The books are always recomputed from raw entries; this table is the separate
+// record of what was *reported*, so the two can be compared. A later edit that
+// moves a filed period is not blocked — Finnish rules provide for corrections —
+// but the divergence becomes visible and the right correction route can be shown.
+model VatFiling {
+  id       String @id @default(cuid())
+  clientId Int
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  year        Int
+  periodKey   String // 'q-0'..'q-3' | 'half-0' | 'half-1' | 'annual-0'
+  frequency   String // 'quarterly' | 'semiannual' | 'annual'
+  periodStart DateTime
+  periodEnd   DateTime
+  dueDate     DateTime
+
+  filedOn DateTime
+
+  // Snapshot of the figures as submitted — deliberately stored, not derived,
+  // so a later change to the books cannot rewrite filing history.
+  outputVat     Float
+  deductibleVat Float
+  netVat        Float
+
+  notes String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([clientId, year, periodKey])
+  @@index([clientId, year])
 }

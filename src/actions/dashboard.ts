@@ -32,6 +32,8 @@ export type ClientDashboardRow = {
   entryCount: number
   /** Bookkeeping fees already invoiced to this client, by service period. */
   billedPeriods: { periodStart: string; periodEnd: string; totalIncVat: number }[]
+  /** VAT periods already reported to Verohallinto, with the figures filed. */
+  filings: { periodKey: string; filedOn: string; dueDate: string; netVat: number }[]
 }
 
 export type DashboardSummary = {
@@ -52,7 +54,13 @@ export async function getDashboardSummary(year: number): Promise<DashboardSummar
 
   const rows = await Promise.all(
     clients.map(async (c): Promise<ClientDashboardRow> => {
-      const books = await getOwnerBooks(c.id, year)
+      const [books, filings] = await Promise.all([
+        getOwnerBooks(c.id, year),
+        db.vatFiling.findMany({
+          where: { clientId: c.id, year },
+          select: { periodKey: true, filedOn: true, dueDate: true, netVat: true },
+        }),
+      ])
       const isAccountHolder = c.role === 'ACCOUNT_HOLDER'
       const months = computeMonths(books, isAccountHolder)
 
@@ -93,6 +101,12 @@ export async function getDashboardSummary(year: number): Promise<DashboardSummar
         entryCount:
           books.incomes.length + books.expenses.length +
           books.linkedInvoices.length + books.sellerInvoices.length,
+        filings: filings.map((f) => ({
+          periodKey: f.periodKey,
+          filedOn: f.filedOn.toISOString(),
+          dueDate: f.dueDate.toISOString(),
+          netVat: f.netVat,
+        })),
         billedPeriods: books.receivedBkInvoices.map((b) => ({
           periodStart: new Date(b.periodStart).toISOString(),
           periodEnd: new Date(b.periodEnd).toISOString(),

@@ -12,6 +12,8 @@ import {
   type GuideStep,
 } from '@/lib/filing-guide'
 import { getFilingFigures, type FilingFigures } from '@/actions/filing'
+import { getVatFilings, type VatFilingRecord } from '@/actions/vat-filing'
+import FilingStatusPanel from '@/components/FilingStatusPanel'
 
 const VAT_FREQ_STORAGE_KEY = 'books_vat_filing_freq'
 
@@ -100,8 +102,10 @@ export default function FilingGuide({ clients, year, years }: {
   const [frequency, setFrequency] = useState<VatFilingFrequency>('quarterly')
   const [periodKey, setPeriodKey] = useState<string | null>(null)
   const [data, setData] = useState<FilingFigures | null>(null)
+  const [filings, setFilings] = useState<VatFilingRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [checked, setChecked] = useState<Record<string, boolean>>({})
+  const [refreshKey, setRefreshKey] = useState(0)
 
   useEffect(() => {
     try {
@@ -111,13 +115,13 @@ export default function FilingGuide({ clients, year, years }: {
   }, [])
 
   useEffect(() => {
-    if (clientId === null) { setData(null); return }
+    if (clientId === null) { setData(null); setFilings([]); return }
     setLoading(true)
-    getFilingFigures(clientId, year)
-      .then(setData)
-      .catch(() => setData(null))
+    Promise.all([getFilingFigures(clientId, year), getVatFilings(clientId, year)])
+      .then(([figures, f]) => { setData(figures); setFilings(f) })
+      .catch(() => { setData(null); setFilings([]) })
       .finally(() => setLoading(false))
-  }, [clientId, year])
+  }, [clientId, year, refreshKey])
 
   const periods = useMemo(() => vatPeriodsForYear(year, frequency), [year, frequency])
   const defaultPeriod = useMemo(() => currentOpenPeriod(year, frequency), [year, frequency])
@@ -256,6 +260,21 @@ export default function FilingGuide({ clients, year, years }: {
             ))}
           </ol>
         </div>
+      )}
+
+      {/* ── Filing status ──
+          Placed right after the steps: marking the period filed is the last
+          thing you do, and afterwards this is where a divergence shows up. */}
+      {mode === 'vat' && data && periodTotals && clientId !== null && (
+        <FilingStatusPanel
+          clientId={clientId}
+          year={year}
+          period={period}
+          frequency={frequency}
+          filing={filings.find((f) => f.periodKey === period.key) ?? null}
+          totals={periodTotals}
+          onChanged={() => setRefreshKey((k) => k + 1)}
+        />
       )}
 
       {/* ── Rate note ── */}
