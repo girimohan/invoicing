@@ -17,38 +17,25 @@ const icon = (path: React.ReactNode) => (
 )
 
 const IconDashboard = icon(<><rect x="2.5" y="2.5" width="6" height="6" rx="1.5" /><rect x="11.5" y="2.5" width="6" height="6" rx="1.5" /><rect x="2.5" y="11.5" width="6" height="6" rx="1.5" /><rect x="11.5" y="11.5" width="6" height="6" rx="1.5" /></>)
-const IconBooks     = icon(<><path d="M3 4.5A1.5 1.5 0 0 1 4.5 3H9v14H4.5A1.5 1.5 0 0 1 3 15.5v-11Z" /><path d="M17 4.5A1.5 1.5 0 0 0 15.5 3H11v14h4.5a1.5 1.5 0 0 0 1.5-1.5v-11Z" /></>)
 const IconClients   = icon(<><circle cx="7.5" cy="7" r="2.8" /><path d="M2.5 16.5c0-2.5 2.2-4.2 5-4.2s5 1.7 5 4.2" /><path d="M13.5 8.2a2.6 2.6 0 0 0 0-4.9" /><path d="M15 16.5c0-1.9-.7-3.2-2-4" /></>)
-const IconInvoice   = icon(<><path d="M5 2.5h10v15l-2.5-1.5L10 17.5 7.5 16 5 17.5v-15Z" /><path d="M8 7h4M8 10.5h4" /></>)
 const IconVat       = icon(<><circle cx="10" cy="10" r="7.5" /><path d="M7 13 13 7" /><circle cx="7.6" cy="7.6" r="1.1" /><circle cx="12.4" cy="12.4" r="1.1" /></>)
 const IconFiling    = icon(<><path d="M4 3.5h8.5L16 7v9.5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-12a1 1 0 0 1 1-1Z" /><path d="M12 3.5V7h4" /><path d="m6.5 12 1.6 1.6L11.5 10" /></>)
 const IconTools     = icon(<><path d="M12.6 3.4a3.9 3.9 0 0 0-5.2 4.8L3 12.6V17h4.4l4.4-4.4a3.9 3.9 0 0 0 4.8-5.2l-2.3 2.3-2.1-.6-.6-2.1 2.3-2.3Z" /></>)
 
 const NAV: { section: string; links: NavLink[] }[] = [
   {
-    section: 'Overview',
+    section: 'Bookkeeping',
     links: [
-      { href: '/',       label: 'Dashboard',    icon: IconDashboard },
+      { href: '/',       label: 'Clients',      icon: IconClients },
       { href: '/filing', label: 'Filing Guide', icon: IconFiling },
-    ],
-  },
-  {
-    section: 'Clients',
-    links: [
-      { href: '/books',   label: 'Client Books', icon: IconBooks },
-      { href: '/clients', label: 'Clients',      icon: IconClients },
     ],
   },
   {
     section: 'My Practice',
     links: [
-      { href: '/bookkeeper', label: 'Service Invoices', icon: IconInvoice },
-      { href: '/my-vat',     label: 'My VAT / OmaVero', icon: IconVat },
+      { href: '/my-vat', label: 'My VAT / OmaVero', icon: IconVat },
+      { href: '/tools',  label: 'Tools',           icon: IconTools },
     ],
-  },
-  {
-    section: 'Tools',
-    links: [{ href: '/tools', label: 'Tools & Legacy', icon: IconTools }],
   },
 ]
 

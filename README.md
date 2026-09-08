@@ -6,22 +6,25 @@ expenses, VAT and income tax reference figures per client, and produces the
 figures needed for OmaVero.
 
 Originally built around invoicing between substitute couriers and account
-holders. Every client is now a platform-account owner in their own right, so
-that workflow has moved to **Tools → Legacy** and the app leads with the
-bookkeeping cycle instead.
+holders. Every client now runs their own platform account, so that workflow has
+moved to **Tools** and the app leads with the bookkeeping cycle instead. The old
+records stay fully reportable — nothing was removed.
 
 ## Screens
 
-### Dashboard (`/`)
-The daily working view. One row per client for the current VAT period:
-turnover, output VAT, input VAT and net VAT payable, plus the filing deadline
-countdown (*arvonlisäveroilmoitus* is due on the 12th of the second month after
-the period ends). Flags clients with no entries yet and clients not yet billed
-for your bookkeeping fee. Switch period or filing frequency at the top; click a
-client to open their books.
+### Clients (`/`)
+The home screen and the only client list. One row per client for the current
+VAT period: their turnover, their net VAT, which months still have no entries,
+and whether your service fee has been invoiced. Nothing is summed across
+clients — they file separately, so a combined total would mean nothing.
 
-### Client Books (`/books`)
-The core of the app, per client and per year:
+From here you can add a client, edit one, add a monthly income entry from the
+platform's self-billing invoice, or click through to their books. The VAT
+deadline (*arvonlisäveroilmoitus*, due the 12th of the second month after the
+period ends) is shown in the header, and called out when it is close or past.
+
+### Books (`/books?client=`)
+Opened by clicking a client. Per client and per year:
 - **Income** — Wolt pay periods (ex-VAT amount, tips at 0% VAT, Wolt invoice ref)
 - **Expenses** — categorised business costs with VAT
 - **VAT** — monthly breakdown grouped into quarterly / half-year / annual filing
@@ -31,19 +34,18 @@ The core of the app, per client and per year:
   automatic declining-balance depreciation (*poistot*, EVL 30§) on capital assets
 - **Vehicle** — mileage and trip log (*ajopäiväkirja*)
 
-### Clients (`/clients`)
-Client records — name, Y-tunnus, VAT ID, address, IBAN/BIC, contact details.
-Client IDs start at 101. Deleting a client unlinks their invoices rather than
-destroying them.
-
 ### Bookkeeper (`/bookkeeper`, `/my-vat`)
 Issue your own bookkeeping-fee invoices to clients, and track your own VAT
 position for OmaVero across both bookkeeping fees and your own gig work.
 
+### Filing Guide (`/filing`)
+Step-by-step OmaVero walkthrough for the VAT return and the annual business tax
+return (Form 5), showing the selected client's own figures against each MyTax
+field. Content is checked against vero.fi and each step links its source.
+
 ### Tools (`/tools`)
-YEL pension calculator, plus the legacy substitute-worker invoice generator and
-its invoice history — kept fully working so historical invoices stay editable
-and correctly reported.
+YEL calculator, plus the retired worker invoice generator and its invoice
+history — kept working so past invoices stay editable and correctly reported.
 
 ## VAT allocation rule
 Every income record is assigned to a VAT period by its **service period**

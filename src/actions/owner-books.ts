@@ -16,6 +16,14 @@ export interface OwnerIncomePeriodInput {
   totalExVat: number
   tipsExVat?: number    // Tips income at 0% VAT
   vatRate: number
+  /**
+   * VAT exactly as stated on the platform's self-billing invoice. Supplied so
+   * the books match the document: Wolt rounds per line, so recomputing
+   * totalExVat x rate can land a cent or two away from the figure the invoice
+   * actually shows, and that gap would flow straight into the VAT return.
+   * Omit to derive it from the rate.
+   */
+  vatAmount?: number
   notes?: string
 }
 
@@ -35,7 +43,9 @@ export interface OwnerExpenseInput {
 
 export async function createOwnerIncomePeriod(data: OwnerIncomePeriodInput) {
   const tipsExVat = data.tipsExVat ?? 0
-  const vatAmount = Math.round(data.totalExVat * (data.vatRate / 100) * 100) / 100
+  const vatAmount = data.vatAmount !== undefined && Number.isFinite(data.vatAmount)
+    ? round2(data.vatAmount)
+    : Math.round(data.totalExVat * (data.vatRate / 100) * 100) / 100
   // Tips are 0% VAT — they are added at face value to the total
   const totalIncVat = Math.round((data.totalExVat + vatAmount + tipsExVat) * 100) / 100
   const record = await db.ownerIncomePeriod.create({
@@ -54,6 +64,7 @@ export async function createOwnerIncomePeriod(data: OwnerIncomePeriodInput) {
     },
   })
   revalidatePath('/books')
+  revalidatePath('/')
   return record
 }
 

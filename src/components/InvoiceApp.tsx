@@ -576,7 +576,7 @@ export default function InvoiceApp({
       {/* ── LEFT PANEL: Entry Form ── */}
       <div className="w-[55%] overflow-y-auto bg-white">
         <form onSubmit={handleSubmit} noValidate>
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-white z-10">
+          <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between sticky top-0 bg-white z-10">
             <h1 className="font-bold text-base">
               {editInvoice ? `Editing: ${editInvoice.invoiceNumber}` : 'New Substitute Invoice'}
             </h1>
@@ -584,7 +584,7 @@ export default function InvoiceApp({
               <button
                 type="submit"
                 disabled={submitting}
-                className="bg-blue-700 text-white text-xs px-4 py-1.5 rounded font-semibold hover:bg-blue-800 disabled:opacity-50"
+                className="bg-indigo-600 text-white text-xs px-4 py-1.5 rounded font-semibold hover:bg-indigo-700 disabled:opacity-50"
               >
                 {submitting
                   ? (editInvoice ? 'Updating…' : 'Generating…')
@@ -611,7 +611,7 @@ export default function InvoiceApp({
                 <div className="bg-purple-50 border border-purple-100 rounded p-3">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[11px] font-semibold text-purple-700">Substitute Worker (Invoice From)</span>
-                    <a href="/clients" target="_blank" className="text-[10px] text-purple-500 hover:underline">Manage →</a>
+                    <a href="/" target="_blank" className="text-[10px] text-purple-500 hover:underline">Manage →</a>
                   </div>
                   <select
                     className="w-full border border-purple-200 rounded px-2 py-1.5 text-xs bg-white"
@@ -635,7 +635,7 @@ export default function InvoiceApp({
                 <div className="bg-green-50 border border-green-100 rounded p-3">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-[11px] font-semibold text-green-700">Account Holder (Invoice To)</span>
-                    <a href="/clients" target="_blank" className="text-[10px] text-green-600 hover:underline">Manage →</a>
+                    <a href="/" target="_blank" className="text-[10px] text-green-600 hover:underline">Manage →</a>
                   </div>
                   <select
                     className="w-full border border-green-200 rounded px-2 py-1.5 text-xs bg-white"
@@ -657,9 +657,9 @@ export default function InvoiceApp({
               </div>
 
               {/* Invoice Number — auto-generated from holder selection */}
-              <div className="bg-blue-50 border border-blue-200 rounded p-3 flex items-center gap-4">
+              <div className="bg-indigo-50 border border-indigo-200 rounded p-3 flex items-center gap-4">
                 <div className="flex-1">
-                  <label className="block text-[10px] font-semibold text-blue-700 mb-1 uppercase tracking-wide">
+                  <label className="block text-[10px] font-semibold text-indigo-700 mb-1 uppercase tracking-wide">
                     Invoice Number {selectedWorkerId ? '(auto-generated from worker)' : ''}
                   </label>
                   <input
@@ -667,13 +667,13 @@ export default function InvoiceApp({
                     value={form.invoiceNumber}
                     onChange={(e) => handleChange('invoiceNumber', e.target.value)}
                       placeholder="Auto-generated — you can type to override"
-                    className="w-full border border-blue-300 rounded px-2 py-1.5 text-sm font-mono font-semibold focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white text-blue-800"
+                    className="w-full border border-indigo-300 rounded px-2 py-1.5 text-sm font-mono font-semibold focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white text-indigo-800"
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-semibold text-blue-700 mb-1">Invoice Sequence</label>
+                  <label className="block text-[10px] font-semibold text-indigo-700 mb-1">Invoice Sequence</label>
                   <select
-                    className="border border-blue-200 rounded px-2 py-1.5 text-xs bg-white"
+                    className="border border-indigo-200 rounded px-2 py-1.5 text-xs bg-white"
                     value={invoiceSeq}
                     onChange={(e) => {
                       const seq = e.target.value as '1' | '2'
@@ -719,7 +719,7 @@ export default function InvoiceApp({
 
             {/* ── Wolt Reference (internal only, not on invoice) ── */}
             <div className="form-section">
-              <div className="form-section-title">Wolt Self-Billing Reference <span className="normal-case font-normal text-gray-400">(internal record only — not printed on invoice)</span></div>
+              <div className="form-section-title">Wolt Self-Billing Reference <span className="normal-case font-normal text-slate-400">(internal record only — not printed on invoice)</span></div>
               <div className="grid grid-cols-2 gap-3">
                 {fc('Wolt Invoice Number', inp('woltInvoiceNumber', { placeholder: 'e.g. FIN/26/3111862-6/1/1' }))}
                 {fc('Wolt Invoice Date', inp('woltInvoiceDate', { type: 'date' }))}
@@ -789,15 +789,15 @@ export default function InvoiceApp({
               <div className="overflow-x-auto">
                 <table className="w-full text-xs border-collapse">
                   <thead>
-                    <tr className="bg-gray-100">
-                      <th className="text-left p-2 border border-gray-200 font-medium">Description</th>
-                      <th className="p-2 border border-gray-200 font-medium w-28 text-right">Wolt Gross (ex VAT) €</th>
-                      <th className="p-2 border border-gray-200 font-medium w-36 text-center">Worker Share</th>
-                      <th className="p-2 border border-gray-200 font-medium w-24 text-right">Claimed (ex VAT) €</th>
-                      <th className="p-2 border border-gray-200 font-medium w-16">VAT %</th>
-                      <th className="p-2 border border-gray-200 font-medium w-20 text-right">VAT €</th>
-                      <th className="p-2 border border-gray-200 font-medium w-24 text-right">Total €</th>
-                      <th className="p-2 border border-gray-200 w-8"></th>
+                    <tr className="bg-slate-100">
+                      <th className="text-left p-2 border border-slate-200 font-medium">Description</th>
+                      <th className="p-2 border border-slate-200 font-medium w-28 text-right">Wolt Gross (ex VAT) €</th>
+                      <th className="p-2 border border-slate-200 font-medium w-36 text-center">Worker Share</th>
+                      <th className="p-2 border border-slate-200 font-medium w-24 text-right">Claimed (ex VAT) €</th>
+                      <th className="p-2 border border-slate-200 font-medium w-16">VAT %</th>
+                      <th className="p-2 border border-slate-200 font-medium w-20 text-right">VAT €</th>
+                      <th className="p-2 border border-slate-200 font-medium w-24 text-right">Total €</th>
+                      <th className="p-2 border border-slate-200 w-8"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -805,29 +805,29 @@ export default function InvoiceApp({
                       const c = calculated.lineItems[idx]
                       const isAmt = item.shareType === 'AMOUNT'
                       return (
-                        <tr key={item.id} className="hover:bg-gray-50">
-                          <td className="p-1 border border-gray-200">
+                        <tr key={item.id} className="hover:bg-slate-50">
+                          <td className="p-1 border border-slate-200">
                             <input
                               type="text"
                               value={item.description}
                               onChange={(e) => handleLineItemChange(item.id, 'description', e.target.value)}
-                              className="w-full border-0 p-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 rounded"
+                              className="w-full border-0 p-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-400 rounded"
                               placeholder="Description"
                             />
                           </td>
-                          <td className="p-1 border border-gray-200">
+                          <td className="p-1 border border-slate-200">
                             <input
                               type="number"
                               value={item.earnedAmount}
                               onChange={(e) => handleLineItemChange(item.id, 'earnedAmount', e.target.value)}
-                              className="w-full border-0 p-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400 rounded"
+                              className="w-full border-0 p-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-indigo-400 rounded"
                               step="0.01"
                               min="0"
                               placeholder="0.00"
                             />
                           </td>
                           {/* Share column: toggle between % and € */}
-                          <td className="p-1 border border-gray-200">
+                          <td className="p-1 border border-slate-200">
                             <div className="flex items-center gap-1">
                               {/* Toggle button */}
                               <button
@@ -837,7 +837,7 @@ export default function InvoiceApp({
                                 className={`flex-shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border transition-colors ${
                                   isAmt
                                     ? 'bg-orange-100 text-orange-700 border-orange-300 hover:bg-orange-200'
-                                    : 'bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200'
+                                    : 'bg-indigo-100 text-indigo-700 border-indigo-300 hover:bg-indigo-200'
                                 }`}
                               >
                                 {isAmt ? '€' : '%'}
@@ -861,7 +861,7 @@ export default function InvoiceApp({
                                     value={item.sharePercent}
                                     onChange={(e) => handleLineItemChange(item.id, 'sharePercent', e.target.value)}
                                     list="share-presets"
-                                    className="w-full border-0 p-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400 rounded"
+                                    className="w-full border-0 p-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-indigo-400 rounded"
                                     placeholder="75"
                                     title="Percentage of Wolt gross the worker receives"
                                   />
@@ -876,17 +876,17 @@ export default function InvoiceApp({
                               )}
                             </div>
                           </td>
-                          <td className="p-1 border border-gray-200 text-right text-gray-600 pr-2 font-mono">
+                          <td className="p-1 border border-slate-200 text-right text-slate-600 pr-2 font-mono">
                             {c ? c.amountExVat.toFixed(2) : '0.00'}
                           </td>
-                          <td className="p-1 border border-gray-200">
+                          <td className="p-1 border border-slate-200">
                             <input
                               type="text"
                               inputMode="decimal"
                               value={item.vatRate}
                               onChange={(e) => handleLineItemChange(item.id, 'vatRate', e.target.value)}
                               list="vat-presets"
-                              className="w-full border-0 p-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-blue-400 rounded"
+                              className="w-full border-0 p-0.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-indigo-400 rounded"
                               placeholder="25.5"
                             />
                             <datalist id="vat-presets">
@@ -896,13 +896,13 @@ export default function InvoiceApp({
                               <option value="0" />
                             </datalist>
                           </td>
-                          <td className="p-1 border border-gray-200 text-right text-gray-600 pr-2 font-mono">
+                          <td className="p-1 border border-slate-200 text-right text-slate-600 pr-2 font-mono">
                             {c ? c.vatAmount.toFixed(2) : '0.00'}
                           </td>
-                          <td className="p-1 border border-gray-200 text-right font-medium pr-2 font-mono">
+                          <td className="p-1 border border-slate-200 text-right font-medium pr-2 font-mono">
                             {c ? c.totalAmount.toFixed(2) : '0.00'}
                           </td>
-                          <td className="p-1 border border-gray-200 text-center">
+                          <td className="p-1 border border-slate-200 text-center">
                             <button
                               type="button"
                               onClick={() => removeLineItem(item.id)}
@@ -922,7 +922,7 @@ export default function InvoiceApp({
               <button
                 type="button"
                 onClick={addLineItem}
-                className="mt-2 text-xs text-blue-600 hover:underline"
+                className="mt-2 text-xs text-indigo-600 hover:underline"
               >
                 + Add line item
               </button>
@@ -931,10 +931,10 @@ export default function InvoiceApp({
             {/* ── Totals summary ── */}
             <div className="form-section">
               <div className="form-section-title">Totals (Auto-calculated)</div>
-              <div className="bg-gray-50 border border-gray-200 rounded p-4 text-sm">
+              <div className="bg-slate-50 border border-slate-200 rounded p-4 text-sm">
                 {/* VAT breakdown */}
                 {calculated.vatBreakdown.map((vb) => (
-                  <div key={vb.rate} className="text-xs text-gray-500 mb-1">
+                  <div key={vb.rate} className="text-xs text-slate-500 mb-1">
                     <div className="flex justify-between">
                       <span>Turnover at {vb.rate}% VAT:</span>
                       <span>{vb.base.toFixed(2)} €</span>
@@ -945,16 +945,16 @@ export default function InvoiceApp({
                     </div>
                   </div>
                 ))}
-                <div className="border-t border-gray-300 pt-2 mt-2 space-y-1">
-                  <div className="flex justify-between text-gray-600">
+                <div className="border-t border-slate-300 pt-2 mt-2 space-y-1">
+                  <div className="flex justify-between text-slate-600">
                     <span>Total excl. VAT:</span>
                     <span>{calculated.totalExVat.toFixed(2)} €</span>
                   </div>
-                  <div className="flex justify-between text-gray-600">
+                  <div className="flex justify-between text-slate-600">
                     <span>Total VAT:</span>
                     <span>{calculated.totalVat.toFixed(2)} €</span>
                   </div>
-                  <div className="flex justify-between font-bold text-base border-t border-gray-400 pt-1 mt-1">
+                  <div className="flex justify-between font-bold text-base border-t border-slate-400 pt-1 mt-1">
                     <span>Total incl. VAT:</span>
                     <span>{calculated.totalIncVat.toFixed(2)} €</span>
                   </div>
@@ -970,7 +970,7 @@ export default function InvoiceApp({
                   value={form.notes}
                   onChange={(e) => handleChange('notes', e.target.value)}
                   rows={3}
-                  className="border border-gray-300 rounded px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+                  className="border border-slate-300 rounded px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
                   placeholder="Any additional notes or terms…"
                 />
               </div>
@@ -986,15 +986,15 @@ export default function InvoiceApp({
                   type="checkbox"
                   checked={form.includeReference}
                   onChange={(e) => handleChange('includeReference', e.target.checked)}
-                  className="w-4 h-4 accent-blue-600"
+                  className="w-4 h-4 accent-indigo-600"
                 />
-                <span className="text-sm font-medium text-gray-700">
+                <span className="text-sm font-medium text-slate-700">
                   Sisällytä viitenumero / Include reference number
                 </span>
               </label>
 
               {!form.includeReference && (
-                <p className="text-xs text-gray-500 italic">
+                <p className="text-xs text-slate-500 italic">
                   Ei viitenumeroa / No reference number — the payment block will indicate no reference.
                 </p>
               )}
@@ -1003,7 +1003,7 @@ export default function InvoiceApp({
                 <div className="space-y-4">
                   {/* Reference type selector */}
                   <div>
-                    <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Reference format</p>
+                    <p className="text-xs font-semibold text-slate-600 mb-2 uppercase tracking-wide">Reference format</p>
                     <div className="flex gap-4">
                       <label className="flex items-center gap-1.5 cursor-pointer text-xs">
                         <input
@@ -1012,10 +1012,10 @@ export default function InvoiceApp({
                           value="domestic"
                           checked={form.referenceType === 'domestic'}
                           onChange={() => handleChange('referenceType', 'domestic')}
-                          className="accent-blue-600"
+                          className="accent-indigo-600"
                         />
                         <span className="font-medium">Kansallinen viitenumero</span>
-                        <span className="text-gray-400">(domestic Finnish — default)</span>
+                        <span className="text-slate-400">(domestic Finnish — default)</span>
                       </label>
                       <label className="flex items-center gap-1.5 cursor-pointer text-xs">
                         <input
@@ -1024,10 +1024,10 @@ export default function InvoiceApp({
                           value="rf"
                           checked={form.referenceType === 'rf'}
                           onChange={() => handleChange('referenceType', 'rf')}
-                          className="accent-blue-600"
+                          className="accent-indigo-600"
                         />
                         <span className="font-medium">RF-viitenumero</span>
-                        <span className="text-gray-400">(SEPA ISO 11649)</span>
+                        <span className="text-slate-400">(SEPA ISO 11649)</span>
                       </label>
                     </div>
                   </div>
@@ -1037,7 +1037,7 @@ export default function InvoiceApp({
                     <div className="field">
                       <label>
                         Asiakasnumero / Client code
-                        <span className="text-gray-400 font-normal ml-1">(optional)</span>
+                        <span className="text-slate-400 font-normal ml-1">(optional)</span>
                       </label>
                       <input
                         type="text"
@@ -1045,13 +1045,13 @@ export default function InvoiceApp({
                         value={form.refClientCode}
                         onChange={(e) => handleChange('refClientCode', e.target.value)}
                         placeholder="e.g. 106"
-                        className="border border-gray-300 rounded px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                        className="border border-slate-300 rounded px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
                       />
                     </div>
                     <div className="field">
                       <label>
                         Vuosi-kuukausi / Year-month
-                        <span className="text-gray-400 font-normal ml-1">(optional)</span>
+                        <span className="text-slate-400 font-normal ml-1">(optional)</span>
                       </label>
                       <input
                         type="text"
@@ -1059,7 +1059,7 @@ export default function InvoiceApp({
                         value={form.refYearMonth}
                         onChange={(e) => handleChange('refYearMonth', e.target.value)}
                         placeholder="e.g. 202606"
-                        className="border border-gray-300 rounded px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                        className="border border-slate-300 rounded px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
                       />
                     </div>
                     <div className="field">
@@ -1074,38 +1074,38 @@ export default function InvoiceApp({
                         placeholder="1"
                         min="1"
                         step="1"
-                        className="border border-gray-300 rounded px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
+                        className="border border-slate-300 rounded px-2 py-1.5 text-sm w-full focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
                       />
                     </div>
                   </div>
 
                   {/* Base number preview */}
                   {liveRef && (
-                    <div className="text-xs text-gray-500 -mt-1">
+                    <div className="text-xs text-slate-500 -mt-1">
                       Pohjaluku / Base number:{' '}
-                      <span className="font-mono text-gray-700">{liveRef.baseNumber}</span>
+                      <span className="font-mono text-slate-700">{liveRef.baseNumber}</span>
                     </div>
                   )}
 
                   {/* Live reference number display */}
                   {liveRef ? (
-                    <div className="bg-blue-50 border border-blue-300 rounded p-3">
-                      <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-wide mb-1">
+                    <div className="bg-indigo-50 border border-indigo-300 rounded p-3">
+                      <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wide mb-1">
                         Viitenumero / Reference number
                       </p>
                       <div className="flex items-center gap-3">
-                        <span className="font-mono font-bold text-lg text-blue-900 tracking-widest">
+                        <span className="font-mono font-bold text-lg text-indigo-900 tracking-widest">
                           {liveRef.formattedReference}
                         </span>
                         <button
                           type="button"
                           onClick={handleCopyRef}
-                          className="text-xs border border-blue-300 text-blue-700 px-2 py-0.5 rounded hover:bg-blue-100 transition-colors"
+                          className="text-xs border border-indigo-300 text-indigo-700 px-2 py-0.5 rounded hover:bg-indigo-100 transition-colors"
                         >
                           {refCopied ? 'Copied ✓' : 'Copy reference'}
                         </button>
                       </div>
-                      <p className="text-[10px] text-blue-500 mt-1">
+                      <p className="text-[10px] text-indigo-500 mt-1">
                         Type: {liveRef.referenceType === 'rf' ? 'RF (ISO 11649)' : 'Kansallinen (Modulo 10)'}
                         {' · '}Check digit: <span className="font-mono">{liveRef.checkDigit}</span>
                       </p>
@@ -1116,15 +1116,15 @@ export default function InvoiceApp({
                           <button
                             type="button"
                             onClick={() => setShowRefSteps((v) => !v)}
-                            className="text-[10px] text-blue-500 hover:underline"
+                            className="text-[10px] text-indigo-500 hover:underline"
                           >
                             {showRefSteps ? '▾ Hide calculation steps' : '▸ Show calculation steps'}
                           </button>
                           {showRefSteps && (
-                            <div className="mt-2 text-[10px] font-mono bg-white border border-blue-200 rounded p-2 overflow-x-auto">
+                            <div className="mt-2 text-[10px] font-mono bg-white border border-indigo-200 rounded p-2 overflow-x-auto">
                               <table className="border-collapse text-center">
                                 <thead>
-                                  <tr className="text-blue-600">
+                                  <tr className="text-indigo-600">
                                     <th className="px-2 pb-1">Digit</th>
                                     <th className="px-2 pb-1">Weight</th>
                                     <th className="px-2 pb-1">Product</th>
@@ -1132,7 +1132,7 @@ export default function InvoiceApp({
                                 </thead>
                                 <tbody>
                                   {liveRefSteps.digits.map((d, i) => (
-                                    <tr key={i} className={i % 2 === 0 ? 'bg-blue-50' : ''}>
+                                    <tr key={i} className={i % 2 === 0 ? 'bg-indigo-50' : ''}>
                                       <td className="px-2">{d}</td>
                                       <td className="px-2">{liveRefSteps.weights[i]}</td>
                                       <td className="px-2">{liveRefSteps.products[i]}</td>
@@ -1140,7 +1140,7 @@ export default function InvoiceApp({
                                   ))}
                                 </tbody>
                               </table>
-                              <p className="mt-1 text-gray-600">
+                              <p className="mt-1 text-slate-600">
                                 Sum = {liveRefSteps.sum} · Next × 10 = {liveRefSteps.nextMultipleOf10} · Check = {liveRefSteps.checkDigit}
                               </p>
                             </div>
@@ -1176,7 +1176,7 @@ export default function InvoiceApp({
                   </div>
                 ))}
                 {calculated.vatBreakdown.length === 0 && (
-                  <span className="text-gray-400">Enter line items to see VAT filing data.</span>
+                  <span className="text-slate-400">Enter line items to see VAT filing data.</span>
                 )}
               </div>
             </div>
@@ -1186,7 +1186,7 @@ export default function InvoiceApp({
       </div>
 
       {/* ── RIGHT PANEL: Live Invoice Preview ── */}
-      <div className="w-[45%] border-l border-gray-300 overflow-y-auto bg-gray-200 p-4">
+      <div className="w-[45%] border-l border-slate-300 overflow-y-auto bg-slate-200 p-4">
         <InvoicePreview form={form} lineItems={lineItems} calculated={calculated} />
       </div>
     </div>

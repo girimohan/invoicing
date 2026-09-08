@@ -6,24 +6,24 @@ const TOOLS = [
   {
     href: '/tools/yel',
     icon: '⊕',
-    title: 'YEL Calculator',
+    title: 'YEL calculator',
     description: 'Estimate self-employed pension insurance premiums from annual työtulo, including the new-entrepreneur discount.',
-    legacy: false,
+    retired: false,
   },
   {
     href: '/tools/invoice-generator',
     icon: '✦',
-    title: 'Substitute Worker Invoice Generator',
+    title: 'Worker invoice generator',
     description:
-      'Create an invoice from a substitute worker to an account holder, with share splits, VAT breakdown and PDF output. No longer part of the daily workflow — every client is now a platform owner — but kept fully working for historical invoices.',
-    legacy: true,
+      'Creates an invoice from a worker to an account holder, with share splits, VAT breakdown and PDF output. No longer used — clients run their own platform accounts now — but kept working so past invoices can still be opened and edited.',
+    retired: true,
   },
   {
     href: '/invoices',
     icon: '≡',
-    title: 'Invoice History',
-    description: 'All substitute worker invoices ever issued, grouped by worker or account holder, with per-year VAT totals and PDFs.',
-    legacy: true,
+    title: 'Past worker invoices',
+    description: 'Every worker invoice ever issued, with per-year VAT totals and PDFs.',
+    retired: true,
   },
 ]
 
@@ -33,7 +33,7 @@ export default function ToolsPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Tools</h1>
-          <p className="page-subtitle">Calculators and legacy workflows kept outside the daily bookkeeping flow</p>
+          <p className="page-subtitle">Calculators, and older workflows kept out of the daily flow</p>
         </div>
       </div>
 
@@ -49,8 +49,8 @@ export default function ToolsPage() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-[13px] font-semibold text-slate-800 group-hover:text-indigo-700">{tool.title}</span>
-                  {tool.legacy && (
-                    <span className="pill-neutral">Legacy</span>
+                  {tool.retired && (
+                    <span className="pill-neutral">Not in use</span>
                   )}
                 </div>
                 <p className="text-[11.5px] text-slate-500 mt-1.5 leading-relaxed">{tool.description}</p>

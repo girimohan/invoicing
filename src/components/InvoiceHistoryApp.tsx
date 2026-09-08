@@ -229,11 +229,11 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="text-lg font-bold">Invoice History</h1>
-          <p className="text-xs text-gray-400 mt-0.5">Per-worker breakdown · VAT filing · Income tax reference</p>
+          <p className="text-xs text-slate-400 mt-0.5">Per-worker breakdown · VAT filing · Income tax reference</p>
         </div>
         <a
           href="/tools/invoice-generator"
-          className="bg-blue-700 text-white text-xs px-4 py-2 rounded font-semibold hover:bg-blue-800"
+          className="bg-indigo-600 text-white text-xs px-4 py-2 rounded font-semibold hover:bg-indigo-700"
         >
           + New Invoice
         </a>
@@ -254,21 +254,21 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
               onClick={() => setSelectedYear(yr)}
               className={`px-3 py-1 rounded text-xs font-semibold border transition-colors ${
                 yr === selectedYear
-                  ? 'bg-blue-700 text-white border-blue-700'
-                  : 'bg-white text-gray-600 border-gray-300 hover:border-blue-400'
+                  ? 'bg-indigo-600 text-white border-indigo-600'
+                  : 'bg-white text-slate-600 border-slate-300 hover:border-indigo-400'
               }`}
             >
               {yr}
             </button>
           ))}
         </div>
-        <div className="flex gap-1 bg-gray-100 rounded p-0.5">
+        <div className="flex gap-1 bg-slate-100 rounded p-0.5">
           {(['worker', 'owner'] as const).map((mode) => (
             <button
               key={mode}
               onClick={() => setViewMode(mode)}
               className={`px-3 py-1 rounded text-xs font-semibold transition-colors ${
-                viewMode === mode ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                viewMode === mode ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
               {mode === 'worker' ? 'By Substitute Worker' : 'By Account Holder'}
@@ -278,9 +278,9 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
       </div>
 
       {yearInvoices.length === 0 ? (
-        <div className="text-center py-16 text-gray-400 text-sm">
+        <div className="text-center py-16 text-slate-400 text-sm">
           No invoices for {selectedYear} yet.{' '}
-          <a href="/tools/invoice-generator" className="text-blue-600 hover:underline">Create one →</a>
+          <a href="/tools/invoice-generator" className="text-indigo-600 hover:underline">Create one →</a>
         </div>
       ) : viewMode === 'worker' ? (
         <>
@@ -296,50 +296,50 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                 const isOpen = expandedWorker === workerKey
 
                 return (
-                  <div key={workerKey} className="bg-white border border-gray-200 rounded overflow-hidden">
+                  <div key={workerKey} className="bg-white border border-slate-200 rounded overflow-hidden">
                     {/* Worker header — click to expand */}
                     <button
                       type="button"
                       onClick={() => setExpandedWorker(isOpen ? null : workerKey)}
-                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors text-left"
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-sm font-bold text-gray-800">{worker.name}</span>
+                        <span className="text-sm font-bold text-slate-800">{worker.name}</span>
                         {worker.displayId && (
                           <span className="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-mono">
                             ID {worker.displayId}
                           </span>
                         )}
                         {worker.businessId && (
-                          <span className="text-[10px] text-gray-400">Y-tunnus: {worker.businessId}</span>
+                          <span className="text-[10px] text-slate-400">Y-tunnus: {worker.businessId}</span>
                         )}
-                        <span className="text-[10px] text-gray-400">{worker.invoices.length} invoice{worker.invoices.length !== 1 ? 's' : ''}</span>
+                        <span className="text-[10px] text-slate-400">{worker.invoices.length} invoice{worker.invoices.length !== 1 ? 's' : ''}</span>
                       </div>
                       <div className="flex items-center gap-6">
                         <div className="text-right hidden sm:block">
-                          <div className="text-[10px] text-gray-400">Excl. VAT</div>
+                          <div className="text-[10px] text-slate-400">Excl. VAT</div>
                           <div className="text-xs font-mono font-semibold">{fmt(totals.exVat)} €</div>
                         </div>
                         <div className="text-right hidden sm:block">
-                          <div className="text-[10px] text-gray-400">VAT</div>
+                          <div className="text-[10px] text-slate-400">VAT</div>
                           <div className="text-xs font-mono text-amber-700">{fmt(totals.vat)} €</div>
                         </div>
                         <div className="text-right">
-                          <div className="text-[10px] text-gray-400">Total incl. VAT</div>
-                          <div className="text-sm font-bold text-blue-700">{fmt(totals.total)} €</div>
+                          <div className="text-[10px] text-slate-400">Total incl. VAT</div>
+                          <div className="text-sm font-bold text-indigo-700">{fmt(totals.total)} €</div>
                         </div>
-                        <span className="text-gray-400 text-xs">{isOpen ? '▲' : '▼'}</span>
+                        <span className="text-slate-400 text-xs">{isOpen ? '▲' : '▼'}</span>
                       </div>
                     </button>
 
                     {/* Expanded: VAT summary + invoices table */}
                     {isOpen && (
-                      <div className="border-t border-gray-100">
+                      <div className="border-t border-slate-100">
                         {/* Per-worker VAT Filing Summary */}
                         {(() => {
                           const { wVatBreakdown, wQuarters } = workerBreakdowns.get(worker.name)!
                           return (
-                            <div className="px-4 py-4 border-b border-gray-200 bg-amber-50/30">
+                            <div className="px-4 py-4 border-b border-slate-200 bg-amber-50/30">
                               <div className="text-[10px] font-bold uppercase tracking-widest text-amber-700 mb-3">
                                 VAT Filing Summary — {selectedYear}
                               </div>
@@ -347,33 +347,33 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                                 <div className="bg-white border border-amber-200 rounded p-3">
                                   <div className="text-[10px] text-amber-700 font-semibold uppercase tracking-wide mb-2">Annual Totals</div>
                                   <div className="space-y-1 text-xs">
-                                    <div className="flex justify-between"><span className="text-gray-500">Excl. VAT:</span><span className="font-bold">{fmt(totals.exVat)} €</span></div>
-                                    <div className="flex justify-between"><span className="text-gray-500">VAT collected:</span><span className="font-bold text-amber-700">{fmt(totals.vat)} €</span></div>
-                                    <div className="flex justify-between border-t border-amber-200 pt-1"><span className="text-gray-500">Incl. VAT:</span><span className="font-bold">{fmt(totals.total)} €</span></div>
-                                    <div className="flex justify-between text-gray-400"><span>Invoices:</span><span>{worker.invoices.length}</span></div>
+                                    <div className="flex justify-between"><span className="text-slate-500">Excl. VAT:</span><span className="font-bold">{fmt(totals.exVat)} €</span></div>
+                                    <div className="flex justify-between"><span className="text-slate-500">VAT collected:</span><span className="font-bold text-amber-700">{fmt(totals.vat)} €</span></div>
+                                    <div className="flex justify-between border-t border-amber-200 pt-1"><span className="text-slate-500">Incl. VAT:</span><span className="font-bold">{fmt(totals.total)} €</span></div>
+                                    <div className="flex justify-between text-slate-400"><span>Invoices:</span><span>{worker.invoices.length}</span></div>
                                   </div>
                                 </div>
                                 {wVatBreakdown.map((vb) => (
-                                  <div key={vb.rate} className="bg-white border border-gray-200 rounded p-3">
-                                    <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                                  <div key={vb.rate} className="bg-white border border-slate-200 rounded p-3">
+                                    <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 mb-2">
                                       {vb.rate === 0 ? 'Zero-rated (0% VAT)' : `VAT ${fmt(vb.rate)}% Rate`}
                                     </div>
                                     <div className="space-y-1 text-xs">
-                                      <div className="flex justify-between"><span className="text-gray-500">Tax base (veroton):</span><span className="font-bold">{fmt(vb.base)} €</span></div>
+                                      <div className="flex justify-between"><span className="text-slate-500">Tax base (veroton):</span><span className="font-bold">{fmt(vb.base)} €</span></div>
                                       {vb.rate > 0 && (
-                                        <div className="flex justify-between"><span className="text-gray-500">VAT to remit:</span><span className="font-bold text-blue-700">{fmt(vb.vat)} €</span></div>
+                                        <div className="flex justify-between"><span className="text-slate-500">VAT to remit:</span><span className="font-bold text-indigo-700">{fmt(vb.vat)} €</span></div>
                                       )}
                                     </div>
                                   </div>
                                 ))}
                               </div>
-                              <div className="bg-white border border-gray-200 rounded overflow-hidden">
-                                <div className="bg-gray-50 border-b border-gray-200 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                              <div className="bg-white border border-slate-200 rounded overflow-hidden">
+                                <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
                                   Quarterly Breakdown
                                 </div>
                                 <table className="w-full text-xs">
                                   <thead>
-                                    <tr className="border-b border-gray-100 text-[10px] text-gray-400">
+                                    <tr className="border-b border-slate-100 text-[10px] text-slate-400">
                                       <th className="text-left px-3 py-2 font-medium">Quarter</th>
                                       <th className="text-right px-3 py-2 font-medium">Invoices</th>
                                       <th className="text-right px-3 py-2 font-medium">Excl. VAT</th>
@@ -385,8 +385,8 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                                     {wQuarters.map(({ q, base, vat, total, count }) => {
                                       const months = ['Jan–Mar', 'Apr–Jun', 'Jul–Sep', 'Oct–Dec'][q - 1]
                                       return (
-                                        <tr key={q} className={`border-b border-gray-50 ${count === 0 ? 'text-gray-300' : ''}`}>
-                                          <td className="px-3 py-2 font-medium">Q{q} <span className="text-gray-400 font-normal">({months})</span></td>
+                                        <tr key={q} className={`border-b border-slate-50 ${count === 0 ? 'text-slate-300' : ''}`}>
+                                          <td className="px-3 py-2 font-medium">Q{q} <span className="text-slate-400 font-normal">({months})</span></td>
                                           <td className="px-3 py-2 text-right">{count}</td>
                                           <td className="px-3 py-2 text-right font-mono">{count > 0 ? `${fmt(base)} €` : '—'}</td>
                                           <td className="px-3 py-2 text-right font-mono text-amber-700">{count > 0 ? `${fmt(vat)} €` : '—'}</td>
@@ -396,7 +396,7 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                                     })}
                                   </tbody>
                                   <tfoot>
-                                    <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold">
+                                    <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
                                       <td className="px-3 py-2">Annual Total</td>
                                       <td className="px-3 py-2 text-right">{worker.invoices.length}</td>
                                       <td className="px-3 py-2 text-right font-mono">{fmt(totals.exVat)} €</td>
@@ -411,7 +411,7 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                         })()}
                         <table className="w-full text-xs">
                           <thead>
-                            <tr className="bg-gray-50 border-b border-gray-200 text-[10px] text-gray-400 uppercase tracking-wide">
+                            <tr className="bg-slate-50 border-b border-slate-200 text-[10px] text-slate-400 uppercase tracking-wide">
                               <th className="text-left px-3 py-2 font-medium">Invoice #</th>
                               <th className="text-left px-3 py-2 font-medium">Date</th>
                               <th className="text-left px-3 py-2 font-medium">Period</th>
@@ -429,12 +429,12 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                                 <>
                                   <tr
                                     key={inv.id}
-                                    className="border-b border-gray-100 hover:bg-blue-50 cursor-pointer"
+                                    className="border-b border-slate-100 hover:bg-indigo-50 cursor-pointer"
                                     onClick={() => setExpandedInvoice(rowOpen ? null : inv.id)}
                                   >
-                                    <td className="px-3 py-2 font-mono font-semibold text-blue-700">{inv.invoiceNumber}</td>
-                                    <td className="px-3 py-2 text-gray-600">{fmtDate(inv.invoiceDate)}</td>
-                                    <td className="px-3 py-2 text-gray-400 text-[10px]">
+                                    <td className="px-3 py-2 font-mono font-semibold text-indigo-700">{inv.invoiceNumber}</td>
+                                    <td className="px-3 py-2 text-slate-600">{fmtDate(inv.invoiceDate)}</td>
+                                    <td className="px-3 py-2 text-slate-400 text-[10px]">
                                       {fmtDate(inv.periodStart)} – {fmtDate(inv.periodEnd)}
                                     </td>
                                     <td className="px-3 py-2">{inv.buyerName}</td>
@@ -446,7 +446,7 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                                         <a
                                           href={`/api/invoice/${inv.id}/pdf`}
                                           target="_blank"
-                                          className="text-blue-600 hover:underline"
+                                          className="text-indigo-600 hover:underline"
                                         >
                                           PDF
                                         </a>
@@ -470,12 +470,12 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
 
                                   {/* Expanded line items */}
                                   {rowOpen && (
-                                    <tr key={`${inv.id}-detail`} className="bg-blue-50">
+                                    <tr key={`${inv.id}-detail`} className="bg-indigo-50">
                                       <td colSpan={8} className="px-5 py-3">
-                                        <div className="text-[10px] font-bold uppercase tracking-wide text-blue-600 mb-2">Line Items</div>
+                                        <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-600 mb-2">Line Items</div>
                                         <table className="w-full text-[10px]">
                                           <thead>
-                                            <tr className="text-gray-400 border-b border-blue-100">
+                                            <tr className="text-slate-400 border-b border-indigo-100">
                                               <th className="text-left pb-1 font-medium">Description</th>
                                               <th className="text-right pb-1 font-medium">Gross (Wolt)</th>
                                               <th className="text-right pb-1 font-medium">Share %</th>
@@ -487,7 +487,7 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                                           </thead>
                                           <tbody>
                                             {inv.lineItems.map((li) => (
-                                              <tr key={li.id} className="border-b border-blue-50">
+                                              <tr key={li.id} className="border-b border-indigo-50">
                                                 <td className="py-1">{li.description}</td>
                                                 <td className="py-1 text-right font-mono">{fmt(li.earnedAmount)} €</td>
                                                 <td className="py-1 text-right">{li.sharePercent}%</td>
@@ -500,7 +500,7 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                                           </tbody>
                                         </table>
                                         {inv.notes && (
-                                          <div className="mt-2 text-gray-500 italic">Notes: {inv.notes}</div>
+                                          <div className="mt-2 text-slate-500 italic">Notes: {inv.notes}</div>
                                         )}
                                       </td>
                                     </tr>
@@ -510,8 +510,8 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                             })}
                           </tbody>
                           <tfoot>
-                            <tr className="border-t-2 border-gray-300 bg-gray-50 font-semibold text-xs">
-                              <td colSpan={4} className="px-3 py-2 text-gray-600">Worker Total</td>
+                            <tr className="border-t-2 border-slate-300 bg-slate-50 font-semibold text-xs">
+                              <td colSpan={4} className="px-3 py-2 text-slate-600">Worker Total</td>
                               <td className="px-3 py-2 text-right font-mono">{fmt(totals.exVat)} €</td>
                               <td className="px-3 py-2 text-right font-mono text-amber-700">{fmt(totals.vat)} €</td>
                               <td className="px-3 py-2 text-right font-mono">{fmt(totals.total)} €</td>
@@ -532,11 +532,11 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
         (() => {
           return (
             <div className="space-y-8">
-              <p className="text-[10px] text-gray-400 -mb-2">
+              <p className="text-[10px] text-slate-400 -mb-2">
                 Bookkeeper view — gross Wolt income, worker costs, and exact figures to enter in OmaVero VAT return.
               </p>
               {owners.length === 0 && (
-                <div className="text-center py-12 text-gray-400 text-sm">No account holder links found for {selectedYear}. Link invoices to a client using the Account Holder field when creating them.</div>
+                <div className="text-center py-12 text-slate-400 text-sm">No account holder links found for {selectedYear}. Link invoices to a client using the Account Holder field when creating them.</div>
               )}
               {owners.map((owner) => {
                 const {
@@ -547,13 +547,13 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                 const isOwnerOpen = expandedOwner === owner.key
 
                 return (
-                  <div key={owner.key} className="bg-white border border-gray-200 rounded overflow-hidden">
+                  <div key={owner.key} className="bg-white border border-slate-200 rounded overflow-hidden">
 
                     {/* ── Header — click to expand ────────────────────────────── */}
                     <button
                       type="button"
                       onClick={() => setExpandedOwner(isOwnerOpen ? null : owner.key)}
-                      className="w-full flex items-center justify-between px-4 py-3 bg-indigo-700 hover:bg-indigo-800 transition-colors text-left"
+                      className="w-full flex items-center justify-between px-4 py-3 bg-indigo-600 hover:bg-indigo-700 transition-colors text-left"
                     >
                       <div className="flex items-center gap-2">
                         {owner.displayId && (
@@ -592,31 +592,31 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
 
                         {/* Income & cost breakdown */}
-                        <div className="border border-gray-200 rounded-lg overflow-hidden">
-                          <div className="bg-gray-50 border-b border-gray-200 px-4 py-2">
-                            <span className="text-[10px] font-bold uppercase tracking-widest text-gray-500">Income Statement</span>
+                        <div className="border border-slate-200 rounded-lg overflow-hidden">
+                          <div className="bg-slate-50 border-b border-slate-200 px-4 py-2">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Income Statement</span>
                           </div>
                           <table className="w-full text-sm">
                             <tbody>
-                              <tr className="border-b border-gray-100">
-                                <td className="px-4 py-2.5 text-gray-600">Gross Wolt income (ex-VAT)</td>
-                                <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-800">+ {fmt(woltIncomeExVat)} €</td>
+                              <tr className="border-b border-slate-100">
+                                <td className="px-4 py-2.5 text-slate-600">Gross Wolt income (ex-VAT)</td>
+                                <td className="px-4 py-2.5 text-right font-mono font-semibold text-slate-800">+ {fmt(woltIncomeExVat)} €</td>
                               </tr>
-                              <tr className="border-b border-gray-100">
-                                <td className="px-4 py-2.5 text-gray-600">Worker payments (ex-VAT)</td>
+                              <tr className="border-b border-slate-100">
+                                <td className="px-4 py-2.5 text-slate-600">Worker payments (ex-VAT)</td>
                                 <td className="px-4 py-2.5 text-right font-mono text-red-600">− {fmt(workerPaymentsExVat)} €</td>
                               </tr>
                               <tr className="bg-indigo-50 border-b border-indigo-100">
                                 <td className="px-4 py-2.5 font-semibold text-indigo-800">Holder net income (ex-VAT)</td>
                                 <td className="px-4 py-2.5 text-right font-mono font-bold text-indigo-800">= {fmt(holderNetIncome)} €</td>
                               </tr>
-                              <tr className="border-b border-gray-100 bg-gray-50">
-                                <td className="px-4 py-2 text-[11px] text-gray-500">VAT billed by workers (paid out)</td>
+                              <tr className="border-b border-slate-100 bg-slate-50">
+                                <td className="px-4 py-2 text-[11px] text-slate-500">VAT billed by workers (paid out)</td>
                                 <td className="px-4 py-2 text-right font-mono text-[11px] text-orange-600">− {fmt(totalWorkerCost - workerPaymentsExVat)} €</td>
                               </tr>
                               <tr>
-                                <td className="px-4 py-2 text-[11px] text-gray-500">Total cash paid to workers (incl. VAT)</td>
-                                <td className="px-4 py-2 text-right font-mono text-[11px] text-gray-600">{fmt(totalWorkerCost)} €</td>
+                                <td className="px-4 py-2 text-[11px] text-slate-500">Total cash paid to workers (incl. VAT)</td>
+                                <td className="px-4 py-2 text-right font-mono text-[11px] text-slate-600">{fmt(totalWorkerCost)} €</td>
                               </tr>
                             </tbody>
                           </table>
@@ -629,26 +629,26 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                           </div>
                           <table className="w-full text-sm">
                             <tbody>
-                              <tr className="border-b border-gray-100 bg-blue-50/50">
-                                <td className="px-4 py-1.5 text-[10px] font-bold text-blue-700 uppercase tracking-wide" colSpan={2}>SALES</td>
+                              <tr className="border-b border-slate-100 bg-indigo-50/50">
+                                <td className="px-4 py-1.5 text-[10px] font-bold text-indigo-700 uppercase tracking-wide" colSpan={2}>SALES</td>
                               </tr>
-                              <tr className="border-b border-gray-100">
-                                <td className="px-4 py-2 text-gray-600">Taxable sales (veroton myynti)</td>
-                                <td className="px-4 py-2 text-right font-mono font-semibold text-gray-800">{fmt(woltIncomeExVat)} €</td>
+                              <tr className="border-b border-slate-100">
+                                <td className="px-4 py-2 text-slate-600">Taxable sales (veroton myynti)</td>
+                                <td className="px-4 py-2 text-right font-mono font-semibold text-slate-800">{fmt(woltIncomeExVat)} €</td>
                               </tr>
-                              <tr className="border-b border-gray-200">
-                                <td className="px-4 py-2 text-gray-600">Output VAT / vero myynneistä</td>
-                                <td className="px-4 py-2 text-right font-mono font-semibold text-blue-700">{fmt(outputVat)} €</td>
+                              <tr className="border-b border-slate-200">
+                                <td className="px-4 py-2 text-slate-600">Output VAT / vero myynneistä</td>
+                                <td className="px-4 py-2 text-right font-mono font-semibold text-indigo-700">{fmt(outputVat)} €</td>
                               </tr>
-                              <tr className="border-b border-gray-100 bg-orange-50/50">
+                              <tr className="border-b border-slate-100 bg-orange-50/50">
                                 <td className="px-4 py-1.5 text-[10px] font-bold text-orange-700 uppercase tracking-wide" colSpan={2}>PURCHASES</td>
                               </tr>
-                              <tr className="border-b border-gray-100">
-                                <td className="px-4 py-2 text-gray-600">Taxable purchases (veroton osto)</td>
-                                <td className="px-4 py-2 text-right font-mono font-semibold text-gray-800">{fmt(workerPaymentsExVat)} €</td>
+                              <tr className="border-b border-slate-100">
+                                <td className="px-4 py-2 text-slate-600">Taxable purchases (veroton osto)</td>
+                                <td className="px-4 py-2 text-right font-mono font-semibold text-slate-800">{fmt(workerPaymentsExVat)} €</td>
                               </tr>
-                              <tr className="border-b border-gray-200">
-                                <td className="px-4 py-2 text-gray-600">Input VAT / vero ostoista</td>
+                              <tr className="border-b border-slate-200">
+                                <td className="px-4 py-2 text-slate-600">Input VAT / vero ostoista</td>
                                 <td className="px-4 py-2 text-right font-mono font-semibold text-orange-600">− {fmt(inputVat)} €</td>
                               </tr>
                               <tr className={netVatToRemit >= 0 ? 'bg-red-50' : 'bg-green-50'}>
@@ -666,37 +666,37 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
 
                       {/* ── Quarterly VAT breakdown ───────────────────────────── */}
                       <div>
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">Quarterly VAT Breakdown</div>
-                        <table className="w-full text-xs border border-gray-200 rounded overflow-hidden">
-                          <thead className="bg-gray-50 border-b border-gray-200">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Quarterly VAT Breakdown</div>
+                        <table className="w-full text-xs border border-slate-200 rounded overflow-hidden">
+                          <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
-                              <th className="text-left px-3 py-2 font-semibold text-gray-600">Quarter</th>
-                              <th className="text-right px-3 py-2 font-semibold text-gray-600">Wolt Income ex-VAT</th>
-                              <th className="text-right px-3 py-2 font-semibold text-blue-600">Output VAT</th>
-                              <th className="text-right px-3 py-2 font-semibold text-gray-600">Worker Payments ex-VAT</th>
+                              <th className="text-left px-3 py-2 font-semibold text-slate-600">Quarter</th>
+                              <th className="text-right px-3 py-2 font-semibold text-slate-600">Wolt Income ex-VAT</th>
+                              <th className="text-right px-3 py-2 font-semibold text-indigo-600">Output VAT</th>
+                              <th className="text-right px-3 py-2 font-semibold text-slate-600">Worker Payments ex-VAT</th>
                               <th className="text-right px-3 py-2 font-semibold text-orange-600">Input VAT</th>
-                              <th className="text-right px-3 py-2 font-semibold text-gray-700">Net VAT</th>
+                              <th className="text-right px-3 py-2 font-semibold text-slate-700">Net VAT</th>
                             </tr>
                           </thead>
                           <tbody>
                             {quarters.map(q => (
-                              <tr key={q.q} className={`border-t border-gray-100 ${q.count === 0 ? 'opacity-40' : ''}`}>
-                                <td className="px-3 py-2 font-semibold text-gray-600">Q{q.q} <span className="font-normal text-gray-400">({q.count} inv.)</span></td>
+                              <tr key={q.q} className={`border-t border-slate-100 ${q.count === 0 ? 'opacity-40' : ''}`}>
+                                <td className="px-3 py-2 font-semibold text-slate-600">Q{q.q} <span className="font-normal text-slate-400">({q.count} inv.)</span></td>
                                 <td className="px-3 py-2 text-right font-mono">{q.wolt > 0 ? fmt(q.wolt) : '—'} {q.wolt > 0 ? '€' : ''}</td>
-                                <td className="px-3 py-2 text-right font-mono text-blue-700">{q.outVat > 0 ? fmt(q.outVat) : '—'} {q.outVat > 0 ? '€' : ''}</td>
+                                <td className="px-3 py-2 text-right font-mono text-indigo-700">{q.outVat > 0 ? fmt(q.outVat) : '—'} {q.outVat > 0 ? '€' : ''}</td>
                                 <td className="px-3 py-2 text-right font-mono">{q.workerEx > 0 ? fmt(q.workerEx) : '—'} {q.workerEx > 0 ? '€' : ''}</td>
                                 <td className="px-3 py-2 text-right font-mono text-orange-600">{q.inVat > 0 ? fmt(q.inVat) : '—'} {q.inVat > 0 ? '€' : ''}</td>
-                                <td className={`px-3 py-2 text-right font-mono font-semibold ${q.netVat > 0 ? 'text-red-600' : q.netVat < 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                                <td className={`px-3 py-2 text-right font-mono font-semibold ${q.netVat > 0 ? 'text-red-600' : q.netVat < 0 ? 'text-green-600' : 'text-slate-400'}`}>
                                   {q.count > 0 ? `${fmt(q.netVat)} €` : '—'}
                                 </td>
                               </tr>
                             ))}
                           </tbody>
-                          <tfoot className="border-t-2 border-gray-300 bg-gray-50 font-semibold">
+                          <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-semibold">
                             <tr>
-                              <td className="px-3 py-2 text-gray-600">Annual total</td>
+                              <td className="px-3 py-2 text-slate-600">Annual total</td>
                               <td className="px-3 py-2 text-right font-mono">{fmt(woltIncomeExVat)} €</td>
-                              <td className="px-3 py-2 text-right font-mono text-blue-700">{fmt(outputVat)} €</td>
+                              <td className="px-3 py-2 text-right font-mono text-indigo-700">{fmt(outputVat)} €</td>
                               <td className="px-3 py-2 text-right font-mono">{fmt(workerPaymentsExVat)} €</td>
                               <td className="px-3 py-2 text-right font-mono text-orange-600">{fmt(inputVat)} €</td>
                               <td className={`px-3 py-2 text-right font-mono ${netVatToRemit > 0 ? 'text-red-600' : 'text-green-600'}`}>{fmt(netVatToRemit)} €</td>
@@ -707,17 +707,17 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
 
                       {/* ── Invoice detail table ──────────────────────────────── */}
                       <div>
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500 mb-2">Worker Invoices Detail</div>
-                        <table className="w-full text-xs border border-gray-200 rounded overflow-hidden">
-                          <thead className="bg-gray-50 border-b border-gray-200">
+                        <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">Worker Invoices Detail</div>
+                        <table className="w-full text-xs border border-slate-200 rounded overflow-hidden">
+                          <thead className="bg-slate-50 border-b border-slate-200">
                             <tr>
-                              <th className="text-left px-3 py-2 font-semibold text-gray-600">Invoice #</th>
-                              <th className="text-left px-3 py-2 font-semibold text-gray-600">Worker</th>
-                              <th className="text-left px-3 py-2 font-semibold text-gray-600">Date</th>
-                              <th className="text-right px-3 py-2 font-semibold text-gray-600">Wolt Gross (ex-VAT)</th>
-                              <th className="text-right px-3 py-2 font-semibold text-gray-600">Worker Payment (ex-VAT)</th>
+                              <th className="text-left px-3 py-2 font-semibold text-slate-600">Invoice #</th>
+                              <th className="text-left px-3 py-2 font-semibold text-slate-600">Worker</th>
+                              <th className="text-left px-3 py-2 font-semibold text-slate-600">Date</th>
+                              <th className="text-right px-3 py-2 font-semibold text-slate-600">Wolt Gross (ex-VAT)</th>
+                              <th className="text-right px-3 py-2 font-semibold text-slate-600">Worker Payment (ex-VAT)</th>
                               <th className="text-right px-3 py-2 font-semibold text-orange-600">Input VAT</th>
-                              <th className="text-right px-3 py-2 font-semibold text-gray-600">Total Paid</th>
+                              <th className="text-right px-3 py-2 font-semibold text-slate-600">Total Paid</th>
                               <th className="px-2 py-2"></th>
                             </tr>
                           </thead>
@@ -725,17 +725,17 @@ export default function InvoiceHistoryApp({ invoices: initial }: Props) {
                             {owner.invoices.map((inv) => {
                               const invWolt = round2(inv.lineItems.reduce((s, li) => s + li.earnedAmount, 0))
                               return (
-                                <tr key={inv.id} className="border-t border-gray-100 hover:bg-gray-50">
-                                  <td className="px-3 py-2 font-mono text-gray-600">{inv.invoiceNumber}</td>
-                                  <td className="px-3 py-2 text-gray-700">{inv.sellerName}</td>
-                                  <td className="px-3 py-2 text-gray-500">{fmtDate(inv.invoiceDate)}</td>
+                                <tr key={inv.id} className="border-t border-slate-100 hover:bg-slate-50">
+                                  <td className="px-3 py-2 font-mono text-slate-600">{inv.invoiceNumber}</td>
+                                  <td className="px-3 py-2 text-slate-700">{inv.sellerName}</td>
+                                  <td className="px-3 py-2 text-slate-500">{fmtDate(inv.invoiceDate)}</td>
                                   <td className="px-3 py-2 text-right font-mono text-indigo-700">{fmt(invWolt)} €</td>
                                   <td className="px-3 py-2 text-right font-mono">{fmt(inv.totalExVat)} €</td>
                                   <td className="px-3 py-2 text-right font-mono text-orange-600">{fmt(inv.totalVat)} €</td>
                                   <td className="px-3 py-2 text-right font-mono font-semibold">{fmt(inv.totalIncVat)} €</td>
                                   <td className="px-2 py-2">
                                     <a href={`/api/invoice/${inv.id}/pdf`} target="_blank"
-                                      className="text-blue-500 hover:underline text-[10px]">PDF</a>
+                                      className="text-indigo-500 hover:underline text-[10px]">PDF</a>
                                   </td>
                                 </tr>
                               )

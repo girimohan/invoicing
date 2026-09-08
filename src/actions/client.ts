@@ -91,7 +91,7 @@ export async function createClient(data: ClientInput) {
       defaultShareAmount: data.defaultShareAmount ?? null,
     },
   })
-  revalidatePath('/clients')
+  revalidatePath('/')
   return client
 }
 
@@ -117,7 +117,7 @@ export async function updateClient(id: number, data: ClientInput) {
       defaultShareAmount: data.defaultShareAmount ?? null,
     },
   })
-  revalidatePath('/clients')
+  revalidatePath('/')
   return client
 }
 
@@ -127,5 +127,5 @@ export async function deleteClient(id: number) {
     db.invoice.updateMany({ where: { clientId: id }, data: { clientId: null } }),
     db.client.delete({ where: { id } }),
   ])
-  revalidatePath('/clients')
+  revalidatePath('/')
 }

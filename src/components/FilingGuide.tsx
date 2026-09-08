@@ -269,75 +269,77 @@ export default function FilingGuide({ clients, year, years }: {
         </div>
       )}
 
-      {/* ── Recently changed ── */}
-      <div className="mt-6">
-        <div className="section-title mb-2">Recently changed — check your habits</div>
-        <div className="grid grid-cols-3 gap-3">
-          {RECENT_CHANGES.map((c) => (
-            <div key={c.what} className="card card-pad">
-              <div className="text-[12px] font-semibold text-slate-800">{c.what}</div>
-              <p className="text-[11.5px] text-slate-500 mt-1.5 leading-relaxed">{c.detail}</p>
-              <a href={SOURCES[c.source]} target="_blank" rel="noreferrer"
-                className="inline-block mt-2 text-[11px] text-indigo-600 hover:underline">vero.fi ↗</a>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* ── Reference ──
+          Folded away by default: it matters when something looks wrong, not
+          on every visit. */}
+      <details className="card mt-4 group">
+        <summary className="card-header cursor-pointer list-none select-none">
+          <div>
+            <div className="card-title">Rates, thresholds and recent changes</div>
+            <div className="card-hint">Checked against vero.fi on {VERIFIED_ON}</div>
+          </div>
+          <span className="text-slate-400 text-[12px] group-open:hidden">Show</span>
+          <span className="text-slate-400 text-[12px] hidden group-open:inline">Hide</span>
+        </summary>
 
-      {/* ── Reference ── */}
-      <div className="grid grid-cols-2 gap-3 mt-3">
-        <div className="card">
-          <div className="card-header"><div className="card-title">VAT rates</div></div>
-          <table className="data-table">
-            <tbody>
-              {VAT_RATES.map((r) => (
-                <tr key={`${r.rate}-${r.label}`}>
-                  <td className="w-16 font-semibold text-slate-800 tabular-nums">{r.rate}%</td>
-                  <td className="text-[11.5px] text-slate-500">{r.note}</td>
-                </tr>
+        <div className="px-5 py-4 border-t border-slate-200/70 space-y-5">
+          <div>
+            <div className="section-title mb-2">Watch out for these — the rules changed</div>
+            <ul className="space-y-2">
+              {RECENT_CHANGES.map((c) => (
+                <li key={c.what} className="text-[12px]">
+                  <span className="font-semibold text-slate-800">{c.what}.</span>{' '}
+                  <span className="text-slate-500">{c.detail}</span>{' '}
+                  <a href={SOURCES[c.source]} target="_blank" rel="noreferrer"
+                    className="text-indigo-600 hover:underline whitespace-nowrap">vero.fi ↗</a>
+                </li>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </ul>
+          </div>
 
-        <div className="card">
-          <div className="card-header"><div className="card-title">Thresholds &amp; deadlines</div></div>
-          <table className="data-table">
-            <tbody>
-              <tr>
-                <td className="text-[11.5px] text-slate-500">VAT registration required above</td>
-                <td className="cell-num font-semibold text-slate-800">{THRESHOLDS.vatRegistration.toLocaleString('fi-FI')} €</td>
-              </tr>
-              <tr>
-                <td className="text-[11.5px] text-slate-500">Quarterly VAT period allowed up to</td>
-                <td className="cell-num font-semibold text-slate-800">{THRESHOLDS.quarterlyPeriod.toLocaleString('fi-FI')} €</td>
-              </tr>
-              <tr>
-                <td className="text-[11.5px] text-slate-500">Annual VAT period allowed up to</td>
-                <td className="cell-num font-semibold text-slate-800">{THRESHOLDS.annualPeriod.toLocaleString('fi-FI')} €</td>
-              </tr>
-              <tr>
-                <td className="text-[11.5px] text-slate-500">VAT return &amp; payment due</td>
-                <td className="text-right text-[11.5px] font-semibold text-slate-800">12th of 2nd month after period</td>
-              </tr>
-              <tr>
-                <td className="text-[11.5px] text-slate-500">Annual VAT period due</td>
-                <td className="text-right text-[11.5px] font-semibold text-slate-800">end of February</td>
-              </tr>
-              <tr>
-                <td className="text-[11.5px] text-slate-500">Business tax return (Form 5) due</td>
-                <td className="text-right text-[11.5px] font-semibold text-slate-800">1 April</td>
-              </tr>
-            </tbody>
-          </table>
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <div className="section-title mb-2">VAT rates</div>
+              <ul className="space-y-1.5">
+                {VAT_RATES.map((r) => (
+                  <li key={`${r.rate}-${r.label}`} className="text-[12px] flex gap-2">
+                    <span className="font-semibold text-slate-800 tabular-nums w-12 shrink-0">{r.rate}%</span>
+                    <span className="text-slate-500">{r.note}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <div className="section-title mb-2">Thresholds &amp; deadlines</div>
+              <ul className="space-y-1.5 text-[12px]">
+                <li className="flex justify-between gap-3">
+                  <span className="text-slate-500">VAT registration required above</span>
+                  <span className="font-semibold text-slate-800 tabular-nums">{THRESHOLDS.vatRegistration.toLocaleString('fi-FI')} €</span>
+                </li>
+                <li className="flex justify-between gap-3">
+                  <span className="text-slate-500">Quarterly VAT period up to</span>
+                  <span className="font-semibold text-slate-800 tabular-nums">{THRESHOLDS.quarterlyPeriod.toLocaleString('fi-FI')} €</span>
+                </li>
+                <li className="flex justify-between gap-3">
+                  <span className="text-slate-500">Annual VAT period up to</span>
+                  <span className="font-semibold text-slate-800 tabular-nums">{THRESHOLDS.annualPeriod.toLocaleString('fi-FI')} €</span>
+                </li>
+                <li className="flex justify-between gap-3">
+                  <span className="text-slate-500">VAT return &amp; payment</span>
+                  <span className="font-semibold text-slate-800">12th of 2nd month after</span>
+                </li>
+                <li className="flex justify-between gap-3">
+                  <span className="text-slate-500">Business tax return (Form 5)</span>
+                  <span className="font-semibold text-slate-800">1 April</span>
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
-      </div>
+      </details>
 
-      <p className="text-[11px] text-slate-400 mt-5 leading-relaxed">
-        Checked against vero.fi on {VERIFIED_ON}. Finnish tax rules change most years — re-check
-        the linked source pages before relying on any step, and treat weekend and public-holiday
-        shifts in due dates as indicative. This guide reflects the figures in these books; it is
-        not tax advice.
+      <p className="text-[11px] text-slate-400 mt-4">
+        Finnish tax rules change most years — check the linked vero.fi pages before relying on a step. Not tax advice.
       </p>
     </div>
   )
