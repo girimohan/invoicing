@@ -148,7 +148,10 @@ export function VatReportPDF({
         { label: 'Substitute worker invoices, output pass-through', amount: period.outVatSubs },
         { label: 'Bookkeeping services issued', amount: period.outVatBk },
       ].filter(r => r.amount !== 0)
-    : [{ label: 'Your invoices (Myyntivero)', amount: period.outVat }].filter(r => r.amount !== 0)
+    : [
+        { label: 'Own Wolt income (Myyntivero)', amount: period.outVatOwn },
+        { label: 'Your invoices (Myyntivero)', amount: Math.round((period.outVat - period.outVatOwn) * 100) / 100 },
+      ].filter(r => r.amount !== 0)
 
   const inputRows: ReportRow[] = (isAccountHolder
     ? [

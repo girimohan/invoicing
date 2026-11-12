@@ -56,9 +56,11 @@ function fmtDate(d: Date) {
 
 // ─── VAT period/month row cells — shared by period rows and nested month rows ──
 
-function VatRowCells({ d, isAccountHolder, showSubs, showBk, showRecBk, muted }: {
+function VatRowCells({ d, isAccountHolder, showOwn, showSubs, showBk, showRecBk, muted }: {
   d: { outVatOwn: number; outVatSubs: number; outVatBk: number; outVat: number; inVatW: number; inVatBkFee: number; inVatE: number; net: number }
   isAccountHolder: boolean
+  /** Substitute-worker view only: the client also has own self-billing income periods. */
+  showOwn: boolean
   showSubs: boolean
   showBk: boolean
   showRecBk: boolean
@@ -82,8 +84,9 @@ function VatRowCells({ d, isAccountHolder, showSubs, showBk, showRecBk, muted }:
   }
   return (
     <>
+      {showOwn && <td className={cls('text-green-700')}>{fmt(d.outVatOwn)}</td>}
       <td className={cls('text-purple-700')}>{fmt(d.outVat)}</td>
-      {showRecBk && <td className={cls('text-purple-600')}>{fmt(d.inVatBkFee)}</td>}
+      {showRecBk &&<td className={cls('text-purple-600')}>{fmt(d.inVatBkFee)}</td>}
       <td className={cls('text-red-600')}>{fmt(d.inVatE)}</td>
       <td className={netCls}>{fmt(d.net)}</td>
     </>
@@ -110,7 +113,7 @@ function MonthItemization({ mo, isAccountHolder }: { mo: MonthVat; isAccountHold
   }
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-      {isAccountHolder && mo.qi.length > 0 && (
+      {mo.qi.length > 0 && (
         <ItemSection title="Own Wolt income — output VAT" colorClass="text-green-700">
           <thead className="bg-green-50"><tr>
             <th className="text-left px-2 py-1 font-medium text-slate-500">Period</th>
@@ -339,7 +342,7 @@ export default function BooksApp({ initialClients, initialClientId = null, initi
   //           input  = worker invoice VAT + bookkeeper fee paid VAT (deductible) + other expense VAT
   const filingOutputVat = isAccountHolder
     ? round2(totalIncomeVat + woltOutputVatFromSubs + bkIncomeVat)
-    : sellerIncomeVat
+    : round2(sellerIncomeVat + totalIncomeVat)
   const filingInputVat = isAccountHolder
     ? round2(workerCostVat + clientBkFeeInputVat + otherExpVat)
     : round2(clientBkFeeInputVat + otherExpVat)
@@ -558,9 +561,16 @@ export default function BooksApp({ initialClients, initialClientId = null, initi
           ) : (
             <div className="grid grid-cols-3 gap-3 mb-5">
               <div className="bg-white border border-slate-200 rounded-xl p-4">
-                <div className="text-[10px] text-slate-400 mb-1 font-medium uppercase tracking-wide">Invoice Income (ex-VAT)</div>
-                <div className="text-xl font-bold text-purple-700 font-mono">{fmt(sellerIncomeExVat)} €</div>
-                {sellerInvoices.length > 0 && <div className="text-[10px] text-slate-400 mt-1">{sellerInvoices.length} invoice{sellerInvoices.length !== 1 ? 's' : ''}</div>}
+                <div className="text-[10px] text-slate-400 mb-1 font-medium uppercase tracking-wide">Income (ex-VAT)</div>
+                <div className="text-xl font-bold text-purple-700 font-mono">{fmt(incomeExVat)} €</div>
+                {incomes.length > 0 ? (
+                  <div className="text-[10px] text-slate-400 mt-1">
+                    Invoices {fmt(sellerIncomeExVat)} + Own fees {fmt(totalIncomeExVat)}
+                    {totalIncomeTips > 0 && <> + Tips {fmt(totalIncomeTips)}</>}
+                  </div>
+                ) : sellerInvoices.length > 0 && (
+                  <div className="text-[10px] text-slate-400 mt-1">{sellerInvoices.length} invoice{sellerInvoices.length !== 1 ? 's' : ''}</div>
+                )}
               </div>
               <div className="bg-white border border-slate-200 rounded-xl p-4">
                 <div className="text-[10px] text-slate-400 mb-1 font-medium uppercase tracking-wide">Other Expenses (ex-VAT)</div>
@@ -576,7 +586,7 @@ export default function BooksApp({ initialClients, initialClientId = null, initi
           {/* ── Tab bar ── */}
           <div className="flex gap-1 mb-5 border-b border-slate-200">
             {([
-              { key: 'income',   label: isAccountHolder ? 'Income' : 'Invoices Sent' },
+              { key: 'income',   label: 'Income' },
               { key: 'expenses', label: 'Expenses' },
               { key: 'vat',      label: 'VAT Summary' },
               { key: 'tax',      label: 'Tax Return' },
@@ -592,9 +602,11 @@ export default function BooksApp({ initialClients, initialClientId = null, initi
           {loading && <div className="text-[12px] text-slate-400 py-10 text-center">Loading…</div>}
 
           {/* ════════════════════════════════════════════════════════════════ */}
-          {/* INCOME TAB — ACCOUNT HOLDER                                    */}
+          {/* INCOME TAB — income periods (every role)                         */}
+          {/* A former substitute who now has their own platform account      */}
+          {/* records self-billing periods too; their old invoices follow.    */}
           {/* ════════════════════════════════════════════════════════════════ */}
-          {!loading && activeTab === 'income' && isAccountHolder && (
+          {!loading && activeTab === 'income' && (
             <div className="space-y-6">
 
               {/* Substitute delivery periods (auto) */}
@@ -845,10 +857,10 @@ export default function BooksApp({ initialClients, initialClientId = null, initi
           )}
 
           {/* ════════════════════════════════════════════════════════════════ */}
-          {/* INCOME TAB — SUBSTITUTE WORKER                                  */}
+          {/* INCOME TAB — SUBSTITUTE WORKER invoices sent                    */}
           {/* ════════════════════════════════════════════════════════════════ */}
           {!loading && activeTab === 'income' && !isAccountHolder && (
-            <div>
+            <div className="mt-6">
               <div className="flex items-center gap-2 mb-3">
                 <h3 className="text-sm font-bold text-slate-700">Invoices Sent</h3>
                 <span className="text-[10px] bg-purple-100 text-purple-700 font-semibold px-2 py-0.5 rounded border border-purple-200">auto-linked</span>
@@ -1234,8 +1246,13 @@ export default function BooksApp({ initialClients, initialClientId = null, initi
                         </>
                       ) : (
                         <>
+                          {incomes.length > 0 && (
+                            <th className="text-right px-3 py-3 font-semibold text-green-700">
+                              Myyntivero<br/><span className="text-[10px] font-normal text-slate-400">Wolt own income</span>
+                            </th>
+                          )}
                           <th className="text-right px-3 py-3 font-semibold text-purple-700">
-                            Output VAT<br/><span className="text-[10px] font-normal text-slate-400">Your invoices</span>
+                            Output VAT<br/><span className="text-[10px] font-normal text-slate-400">{incomes.length > 0 ? 'Total' : 'Your invoices'}</span>
                           </th>
                           {receivedBkInvoices.length > 0 && (
                             <th className="text-right px-3 py-3 font-semibold text-purple-600">
@@ -1276,7 +1293,7 @@ export default function BooksApp({ initialClients, initialClientId = null, initi
                                 PDF
                               </a>
                             </td>
-                            <VatRowCells d={p} isAccountHolder={isAccountHolder} showSubs={linkedInvoices.length > 0} showBk={bookkeeperInvoices.length > 0} showRecBk={receivedBkInvoices.length > 0} />
+                            <VatRowCells d={p} isAccountHolder={isAccountHolder} showOwn={incomes.length > 0} showSubs={linkedInvoices.length > 0} showBk={bookkeeperInvoices.length > 0} showRecBk={receivedBkInvoices.length > 0} />
                           </tr>
                           {isOpen && (
                             <tr key={`${p.key}-detail`}>
@@ -1299,6 +1316,7 @@ export default function BooksApp({ initialClients, initialClientId = null, initi
                                           </>
                                         ) : (
                                           <>
+                                            {incomes.length > 0 && <th className="text-right px-3 py-2 font-semibold text-green-700">Own income</th>}
                                             <th className="text-right px-3 py-2 font-semibold text-purple-700">Output VAT</th>
                                             {receivedBkInvoices.length > 0 && <th className="text-right px-3 py-2 font-semibold text-purple-600">BK fee paid</th>}
                                             <th className="text-right px-3 py-2 font-semibold text-red-600">Expenses</th>
@@ -1322,7 +1340,7 @@ export default function BooksApp({ initialClients, initialClientId = null, initi
                                               <td className="px-3 py-2 font-medium">
                                                 <span className="text-slate-400 mr-1">{monthOpen ? '▾' : '▸'}</span>{MONTH_NAMES[mo.m]}
                                               </td>
-                                              <VatRowCells d={mo} isAccountHolder={isAccountHolder} showSubs={linkedInvoices.length > 0} showBk={bookkeeperInvoices.length > 0} showRecBk={receivedBkInvoices.length > 0} muted={!moActive} />
+                                              <VatRowCells d={mo} isAccountHolder={isAccountHolder} showOwn={incomes.length > 0} showSubs={linkedInvoices.length > 0} showBk={bookkeeperInvoices.length > 0} showRecBk={receivedBkInvoices.length > 0} muted={!moActive} />
                                             </tr>
                                             {monthOpen && (
                                               <tr key={`${mo.m}-detail`}>
@@ -1362,7 +1380,8 @@ export default function BooksApp({ initialClients, initialClientId = null, initi
                         </>
                       ) : (
                         <>
-                          <td className="px-3 py-3 text-right font-bold font-mono text-purple-700">{fmt(sellerIncomeVat)}</td>
+                          {incomes.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-green-700">{fmt(totalIncomeVat)}</td>}
+                          <td className="px-3 py-3 text-right font-bold font-mono text-purple-700">{fmt(filingOutputVat)}</td>
                           {receivedBkInvoices.length > 0 && <td className="px-3 py-3 text-right font-bold font-mono text-purple-600">{fmt(clientBkFeeInputVat)}</td>}
                           <td className="px-3 py-3 text-right font-bold font-mono text-red-600">{fmt(otherExpVat)}</td>
                           <td className={`px-3 py-3 text-right font-bold font-mono text-lg ${netVatPayable >= 0 ? 'text-indigo-700' : 'text-green-600'}`}>{fmt(netVatPayable)}</td>
@@ -1456,7 +1475,7 @@ export default function BooksApp({ initialClients, initialClientId = null, initi
                       ).
                     </>
                   : <>
-                      {' '}Enter <em>Vero kotimaan myynneistä</em> = <strong>{fmt(sellerIncomeVat)} €</strong>.
+                      {' '}Enter <em>Vero kotimaan myynneistä</em> = <strong>{fmt(filingOutputVat)} €</strong>.
                       {filingInputVat > 0 && <> Enter <em>Vähennettävä vero</em> = <strong>{fmt(filingInputVat)} €</strong>.</>}
                     </>}
                 {' '}Net {netVatPayable >= 0 ? 'payable' : 'refund'}: <strong>{fmt(Math.abs(netVatPayable))} €</strong>.
@@ -1563,15 +1582,31 @@ export default function BooksApp({ initialClients, initialClientId = null, initi
                     )}
                   </>
                 ) : (
-                  <div className="px-5 py-4 bg-purple-50">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="text-xs font-bold text-purple-800">Liikevaihto — Invoices Sent</div>
-                        <div className="text-[10px] text-purple-600 mt-0.5">{sellerInvoices.length} invoice{sellerInvoices.length !== 1 ? 's' : ''}</div>
+                  <>
+                    <div className="px-5 py-4 bg-purple-50">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <div className="text-xs font-bold text-purple-800">Liikevaihto — Invoices Sent</div>
+                          <div className="text-[10px] text-purple-600 mt-0.5">{sellerInvoices.length} invoice{sellerInvoices.length !== 1 ? 's' : ''}</div>
+                        </div>
+                        <div className="text-sm font-bold text-purple-700 font-mono shrink-0">{fmt(sellerIncomeExVat)} €</div>
                       </div>
-                      <div className="text-sm font-bold text-purple-700 font-mono shrink-0">{fmt(sellerIncomeExVat)} €</div>
                     </div>
-                  </div>
+                    {incomes.length > 0 && (
+                      <div className="px-5 py-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <div className="text-xs font-bold text-slate-700">Liikevaihto — Wolt Income Periods</div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">
+                              {incomes.length} period{incomes.length !== 1 ? 's' : ''}
+                              {totalIncomeTips > 0 && <> · incl. tips {fmt(totalIncomeTips)} €</>}
+                            </div>
+                          </div>
+                          <div className="text-sm font-bold text-green-700 font-mono shrink-0">{fmt(round2(totalIncomeExVat + totalIncomeTips))} €</div>
+                        </div>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {expByCategory.map((cat) => (

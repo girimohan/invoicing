@@ -21,10 +21,12 @@ function monthBounds(year: number, month: number) {
   return { start: iso(new Date(year, month, 1)), end: iso(new Date(year, month + 1, 0)) }
 }
 
-export default function AddIncomeDialog({ clients, year, defaultClientId, onClose }: {
+export default function AddIncomeDialog({ clients, year, defaultClientId, initialMonth, onClose }: {
   clients: Client[]
   year: number
   defaultClientId: number | null
+  /** 0-11. The caller knows which month is missing; without it, last month. */
+  initialMonth?: number
   onClose: () => void
 }) {
   const router = useRouter()
@@ -35,7 +37,7 @@ export default function AddIncomeDialog({ clients, year, defaultClientId, onClos
   // Default to the month just gone — that is the one being entered in practice.
   const lastMonth = new Date()
   lastMonth.setMonth(lastMonth.getMonth() - 1)
-  const defaultMonth = lastMonth.getFullYear() === year ? lastMonth.getMonth() : 0
+  const defaultMonth = initialMonth ?? (lastMonth.getFullYear() === year ? lastMonth.getMonth() : 0)
 
   const [clientId, setClientId] = useState<number | null>(defaultClientId ?? clients[0]?.id ?? null)
   const [month, setMonth] = useState(defaultMonth)

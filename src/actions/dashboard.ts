@@ -68,12 +68,15 @@ export async function getDashboardSummary(year: number): Promise<DashboardSummar
       // an account holder's own income periods plus their cut of substitute
       // work, versus a worker's own outgoing invoices.
       const totals = months.map((mo) => {
+        // Self-billing income periods count for every role: a former
+        // substitute who now has their own platform account records them too.
+        const ownIncome = mo.qi.reduce((s, i) => s + i.totalExVat + (i.tipsExVat ?? 0), 0)
         const incomeExVat = isAccountHolder
           ? round2(
-              mo.qi.reduce((s, i) => s + i.totalExVat + (i.tipsExVat ?? 0), 0) +
+              ownIncome +
               mo.ql.reduce((s, i) => s + i.lineItems.reduce((t, li) => t + li.earnedAmount - li.amountExVat, 0), 0),
             )
-          : round2(mo.qs.reduce((s, i) => s + i.totalExVat, 0))
+          : round2(ownIncome + mo.qs.reduce((s, i) => s + i.totalExVat, 0))
         const expenseExVat = round2(mo.qe.reduce((s, e) => s + e.amountExVat, 0))
         return toTotals(mo, incomeExVat, expenseExVat)
       })

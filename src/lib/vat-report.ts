@@ -140,10 +140,14 @@ export function computeMonths(data: VatReportSourceData, isAccountHolder: boolea
       const inVatE     = round2(qe.reduce((s, e) => s + e.vatAmount, 0))
       return { m, outVat, outVatOwn, outVatSubs, outVatBk, inVatW, inVatBkFee, inVatE, net: round2(outVat - inVatW - inVatBkFee - inVatE), qi, ql, qs, qe, qbk, qRecBk }
     } else {
-      const outVat    = round2(qs.reduce((s, i) => s + i.totalVat, 0))
+      // A former substitute who later got their own platform account has both
+      // invoices sent (the substitute era) and self-billing income periods
+      // (their own account). Both are their sales, so both carry output VAT.
+      const outVatOwn = round2(qi.reduce((s, i) => s + i.vatAmount, 0))
+      const outVat    = round2(qs.reduce((s, i) => s + i.totalVat, 0) + outVatOwn)
       const inVatBkFee = round2(qRecBk.reduce((s, i) => s + i.vatAmount, 0))
       const inVatE    = round2(qe.reduce((s, e) => s + e.vatAmount, 0))
-      return { m, outVat, outVatOwn: 0, outVatSubs: 0, outVatBk: 0, inVatW: 0, inVatBkFee, inVatE, net: round2(outVat - inVatBkFee - inVatE), qi, ql, qs, qe, qbk, qRecBk }
+      return { m, outVat, outVatOwn, outVatSubs: 0, outVatBk: 0, inVatW: 0, inVatBkFee, inVatE, net: round2(outVat - inVatBkFee - inVatE), qi, ql, qs, qe, qbk, qRecBk }
     }
   })
 }
@@ -227,7 +231,7 @@ export function computeAnnualFigures(
 
   const incomeExVat = isAccountHolder
     ? round2(totalIncomeExVat + totalIncomeTips + ownerCutExVat + bkIncomeExVat)
-    : sellerIncomeExVat
+    : round2(sellerIncomeExVat + totalIncomeExVat + totalIncomeTips)
 
   return {
     woltGrossFromSubstitutes, ownerCutExVat, ownerCutVat, woltOutputVatFromSubs,

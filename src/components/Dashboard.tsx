@@ -252,6 +252,13 @@ export default function Dashboard({ clients, records, nextDisplayId, year, years
           clients={clientOptions}
           year={year}
           defaultClientId={addingIncomeFor === 'any' ? null : addingIncomeFor}
+          // Open on a month inside the period being viewed, so the saved entry
+          // shows up in this list — the client's first gap, else the period start.
+          initialMonth={
+            addingIncomeFor === 'any'
+              ? undefined
+              : rows.find((r) => r.client.id === addingIncomeFor)?.f.gaps[0] ?? period.startMonth
+          }
           onClose={() => setAddingIncomeFor(null)}
         />
       )}

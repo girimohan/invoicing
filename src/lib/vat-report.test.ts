@@ -93,13 +93,27 @@ describe('computeAnnualFigures — account holder', () => {
 })
 
 describe('computeAnnualFigures — substitute worker', () => {
-  it('uses their own outgoing invoices as turnover, ignoring account-holder figures', () => {
+  it('uses their own outgoing invoices as turnover, ignoring owner-side substitute figures', () => {
     const f = computeAnnualFigures(
-      { ...empty, sellerInvoices: [subInvoice(3, 1000, 800)], incomes: [income(0, 999)] },
+      { ...empty, sellerInvoices: [subInvoice(3, 1000, 800)], linkedInvoices: [subInvoice(4, 500, 300)] },
       false,
     )
     expect(f.sellerIncomeExVat).toBe(800)
     expect(f.incomeExVat).toBe(800)
+  })
+
+  // A former substitute who later got their own platform account: invoices
+  // sent up to mid-year, self-billing income periods after. Both are sales.
+  it('also counts their own income periods once they have their own account', () => {
+    const data = { ...empty, sellerInvoices: [subInvoice(5, 1000, 800)], incomes: [income(7, 1000, 50)] }
+    const f = computeAnnualFigures(data, false)
+    expect(f.incomeExVat).toBe(1850)
+
+    const months = computeMonths(data, false)
+    expect(months[7].outVatOwn).toBe(255)
+    expect(months[7].outVat).toBe(255)
+    expect(months[7].net).toBe(255)
+    expect(months[5].outVat).toBe(204)
   })
 })
 
